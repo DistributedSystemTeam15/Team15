@@ -50,7 +50,7 @@ public class CMClientApp {
 
     // GUI 초기화 및 텍스트 편집기 창 생성
     void createTextEditorUI() {
-        JFrame frame = new JFrame("공유 편집 클라이언트 (비동기 버전)");
+        JFrame frame = new JFrame("Shared Editing Client (Asynchronous Version)");
         textArea = new JTextArea(25, 50);
         UndoManager undoManager = new UndoManager();
 
@@ -77,12 +77,12 @@ public class CMClientApp {
 
         // 메뉴 바 및 메뉴 항목 설정 (문서 생성/열기/저장 기능)
         JMenuBar menuBar = new JMenuBar();
-        JMenu fileMenu = new JMenu("파일");
-        deleteItem = new JMenuItem("문서 삭제");
+        JMenu fileMenu = new JMenu("File");
+        deleteItem = new JMenuItem("Delete Document");
         deleteItem.setEnabled(false);  // 로그인 전에는 비활성화
-        newItem = new JMenuItem("새 문서 만들기");
-        openItem = new JMenuItem("문서 열기");
-        saveItem = new JMenuItem("저장");
+        newItem = new JMenuItem("New Document");
+        openItem = new JMenuItem("Open Document");
+        saveItem = new JMenuItem("Save");
 
         newItem.setEnabled(false);
         openItem.setEnabled(false);
@@ -92,7 +92,7 @@ public class CMClientApp {
         newItem.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                String docName = JOptionPane.showInputDialog(frame, "새 문서 이름:");
+                String docName = JOptionPane.showInputDialog(frame, "New Document Name:");
                 if(docName != null && !docName.trim().isEmpty()) {
                     setCurrentDocName(docName.trim());
 
@@ -240,7 +240,7 @@ public class CMClientApp {
         JPasswordField pwField = new JPasswordField();
         panel.add(pwField);
 
-        int result = JOptionPane.showConfirmDialog(null, panel, "로그인", JOptionPane.OK_CANCEL_OPTION);
+        int result = JOptionPane.showConfirmDialog(null, panel, "Login", JOptionPane.OK_CANCEL_OPTION);
         if (result == JOptionPane.OK_OPTION) {
             String id = idField.getText().trim();
             String pw = new String(pwField.getPassword()).trim();
@@ -272,24 +272,22 @@ public class CMClientApp {
         // 이벤트 핸들러 등록 및 CM 클라이언트 시작
         cmStub.setAppEventHandler(clientApp.getClientEventHandler());
 
-        String serverIP = JOptionPane.showInputDialog(null, "서버 IP 주소를 입력하세요:", "서버 접속", JOptionPane.PLAIN_MESSAGE);
+        String serverIP = JOptionPane.showInputDialog(null, "Enter the server IP address:", "Server Connection", JOptionPane.PLAIN_MESSAGE);
         if(serverIP == null || serverIP.trim().isEmpty()) {
             System.out.println("서버 IP 입력 취소됨. 프로그램 종료.");
             System.exit(0);
         }
 
         // ✅ 포트 입력 받기
-        String portStr = JOptionPane.showInputDialog(null, "서버 포트 번호를 입력하세요 (기본값 7777):", "포트 입력", JOptionPane.PLAIN_MESSAGE);
+        String portStr = JOptionPane.showInputDialog(null, "Enter the server port number (default 7777):", "Port Input", JOptionPane.PLAIN_MESSAGE);
         int port = 7777;  // 기본 포트
         if(portStr != null && !portStr.trim().isEmpty()) {
             try {
                 port = Integer.parseInt(portStr.trim());
             } catch(NumberFormatException e) {
-                JOptionPane.showMessageDialog(null, "잘못된 포트 번호입니다. 기본값 7777을 사용합니다.");
+                JOptionPane.showMessageDialog(null, "Invalid port number. Using default 7777.");
             }
         }
-
-
 
         serverIP = serverIP.trim();
 
@@ -297,11 +295,10 @@ public class CMClientApp {
         cmStub.setServerAddress(serverIP);
         cmStub.setServerPort(7777);  // 기본 포트. 필요시 입력 받게 해도 됨
 
-
         // ✅ 서버에 연결
         boolean start = cmStub.startCM();
         if(!start) {
-            JOptionPane.showMessageDialog(null, "서버 연결 실패! IP: " + serverIP);
+            JOptionPane.showMessageDialog(null, "Server connection failed! IP: " + serverIP);
             System.exit(0);
         }
         System.out.println("CM 클라이언트가 서버에 연결되었습니다.");

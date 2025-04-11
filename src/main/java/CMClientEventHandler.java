@@ -77,14 +77,14 @@ public class CMClientEventHandler implements CMAppEventHandler {
 				case "LIST_REPLY":
 					String docListStr = ue.getEventField(CMInfo.CM_STR, "docs");
 					if(docListStr == null || docListStr.isEmpty()) {
-						JOptionPane.showMessageDialog(null, "열 수 있는 문서가 없습니다.");
+						JOptionPane.showMessageDialog(null, "No documents available to open.");
 						break;
 					}
 
 					String[] docNames = docListStr.split(",");
 					JList<String> docListUI = new JList<>(docNames);
 					JScrollPane scrollPane = new JScrollPane(docListUI);
-					int result = JOptionPane.showConfirmDialog(null, scrollPane, "문서 선택", JOptionPane.OK_CANCEL_OPTION);
+					int result = JOptionPane.showConfirmDialog(null, scrollPane, "Select Document", JOptionPane.OK_CANCEL_OPTION);
 
 					if(result == JOptionPane.OK_OPTION) {
 						String selected = docListUI.getSelectedValue();
@@ -107,24 +107,24 @@ public class CMClientEventHandler implements CMAppEventHandler {
 				case "USER_LIST":
 					String doc = ue.getEventField(CMInfo.CM_STR, "doc");
 					String users = ue.getEventField(CMInfo.CM_STR, "users");
-					JOptionPane.showMessageDialog(null, "📄 현재 문서 [" + doc + "] 참여자: " + users);
+					JOptionPane.showMessageDialog(null, "📄 Current document [" + doc + "] participants: " + users);
 					break;
 				case "LIST_DOCS_FOR_DELETE":
 					String docsStr = ue.getEventField(CMInfo.CM_STR, "docs");
 					if(docsStr == null || docsStr.isEmpty()) {
-						JOptionPane.showMessageDialog(null, "삭제 가능한 문서가 없습니다.");
+						JOptionPane.showMessageDialog(null, "No documents available for deletion.");
 						break;
 					}
 
 					String[] docs = docsStr.split(",");
 					JList<String> listUI = new JList<>(docs);
 					scrollPane = new JScrollPane(listUI);
-					result = JOptionPane.showConfirmDialog(null, scrollPane, "삭제할 문서를 선택하세요", JOptionPane.OK_CANCEL_OPTION);
+					result = JOptionPane.showConfirmDialog(null, scrollPane, "Select a document to delete", JOptionPane.OK_CANCEL_OPTION);
 
 					if(result == JOptionPane.OK_OPTION) {
 						String selectedDoc = listUI.getSelectedValue();
 						if(selectedDoc != null && !selectedDoc.trim().isEmpty()) {
-							int confirm = JOptionPane.showConfirmDialog(null, "문서 [" + selectedDoc + "] 을(를) 정말 삭제하시겠습니까?", "삭제 확인", JOptionPane.YES_NO_OPTION);
+							int confirm = JOptionPane.showConfirmDialog(null, "Are you sure you want to delete document [" + selectedDoc + "]?", "Delete Confirmation", JOptionPane.YES_NO_OPTION);
 							if(confirm == JOptionPane.YES_OPTION) {
 								CMUserEvent delEvent = new CMUserEvent();
 								delEvent.setStringID("DELETE_DOC");
