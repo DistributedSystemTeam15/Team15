@@ -1,52 +1,70 @@
 package gui;
 
+import java.awt.BorderLayout;
+import java.awt.event.ActionEvent;
 import javax.swing.*;
-import java.awt.*;
-import java.awt.event.*;
+import javax.swing.event.UndoableEditEvent;
+import javax.swing.event.UndoableEditListener;
+import javax.swing.undo.UndoManager;
+
+import cm.CMClientApp;
 
 public class DocumentEditScreen extends JPanel {
-    private JButton btnSave;
-    private JPanel toolBar;
+    private CMClientApp clientApp;
     private JTextArea textArea;
+    private UndoManager undoManager;
 
-    public DocumentEditScreen() {
+    public DocumentEditScreen(CMClientApp app) {
+        this.clientApp = app;
+        initUI();
+    }
+
+    private void initUI() {
         setLayout(new BorderLayout());
 
-        // 상단 네비게이션 바 (문서 저장 버튼)
-        JPanel navBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
-        btnSave = new JButton("Save");
-        navBar.add(btnSave);
-
-        // 네비게이션 바로 하단의 도구 모음 (임의의 편집 기능 버튼들)
-        toolBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        JButton btnBold = new JButton("B");
-        JButton btnItalic = new JButton("I");
-        JButton btnUnderline = new JButton("U");
-        toolBar.add(btnBold);
-        toolBar.add(btnItalic);
-        toolBar.add(btnUnderline);
-
-        // 상단 영역 전체를 합치는 패널 (네비게이션 바 + 도구 모음)
-        JPanel topPanel = new JPanel(new BorderLayout());
-        topPanel.add(navBar, BorderLayout.NORTH);
-        topPanel.add(toolBar, BorderLayout.SOUTH);
-        add(topPanel, BorderLayout.NORTH);
-
-        // 나머지 영역: 문서 편집 영역 (텍스트 에디터)
-        textArea = new JTextArea();
+        textArea = new JTextArea(25, 50);
+        undoManager = new UndoManager();
+        textArea.getDocument().addUndoableEditListener(new UndoableEditListener() {
+            @Override
+            public void undoableEditHappened(UndoableEditEvent e) {
+                undoManager.addEdit(e.getEdit());
+            }
+        });
+        // Ctrl+Z 단축키 등록
+        textArea.getInputMap().put(KeyStroke.getKeyStroke("control Z"), "Undo");
+        textArea.getActionMap().put("Undo", new AbstractAction("Undo") {
+            public void actionPerformed(ActionEvent evt) {
+                if (undoManager.canUndo()) {
+                    undoManager.undo();
+                }
+            }
+        });
+        textArea.setEditable(false);
         JScrollPane scrollPane = new JScrollPane(textArea);
         add(scrollPane, BorderLayout.CENTER);
     }
 
-    public void addSaveListener(ActionListener listener) {
-        btnSave.addActionListener(listener);
+    // 수신한 문서 내용 업데이트
+    public void updateTextContent(String content) {
+        SwingUtilities.invokeLater(() -> {
+            textArea.setText(content);
+            if (!clientApp.isDocOpen()) {
+                textArea.setEditable(true);
+                clientApp.setDocOpen(true);
+            }
+        });
     }
 
-    public String getDocumentText() {
-        return textArea.getText();
+    // 문서 내용 리셋(예: 새 문서 또는 문서 선택 후)
+    public void resetDocumentView() {
+        SwingUtilities.invokeLater(() -> {
+            textArea.setText("");
+            textArea.setEditable(false);
+            clientApp.setDocOpen(false);
+        });
     }
 
-    public void setDocumentText(String text) {
-        textArea.setText(text);
+    public JTextArea getTextArea() {
+        return textArea;
     }
 }

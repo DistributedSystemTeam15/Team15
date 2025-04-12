@@ -1,59 +1,42 @@
 package gui;
 
+import java.awt.GridLayout;
 import javax.swing.*;
-import java.awt.*;
-import java.awt.event.*;
 
-public class LoginScreen extends JPanel {
-    private JTextField txtUserId;
-    private JPasswordField txtPassword;
-    private JButton btnLogin;
+import cm.CMClientApp;
 
-    public LoginScreen() {
-        setLayout(new GridBagLayout());
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(8, 8, 8, 8);
+public class LoginScreen {
+    private CMClientApp clientApp;
 
-        JLabel lblUserId = new JLabel("User ID:");
-        txtUserId = new JTextField(15);
-        JLabel lblPassword = new JLabel("Password:");
-        txtPassword = new JPasswordField(15);
-        btnLogin = new JButton("LOG IN");
-
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-        gbc.anchor = GridBagConstraints.EAST;
-        add(lblUserId, gbc);
-
-        gbc.gridx = 1;
-        gbc.anchor = GridBagConstraints.WEST;
-        add(txtUserId, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 1;
-        gbc.anchor = GridBagConstraints.EAST;
-        add(lblPassword, gbc);
-
-        gbc.gridx = 1;
-        gbc.anchor = GridBagConstraints.WEST;
-        add(txtPassword, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 2;
-        gbc.gridwidth = 2;
-        gbc.anchor = GridBagConstraints.CENTER;
-        add(btnLogin, gbc);
+    public LoginScreen(CMClientApp app) {
+        this.clientApp = app;
     }
 
-    public void addLoginListener(ActionListener listener) {
-        btnLogin.addActionListener(listener);
-    }
+    // 로그인 다이얼로그 표시 후 로그인 성공 여부 반환
+    public boolean showLoginDialog() {
+        JPanel panel = new JPanel(new GridLayout(2, 2));
+        panel.add(new JLabel("ID:"));
+        JTextField idField = new JTextField();
+        panel.add(idField);
+        panel.add(new JLabel("Password:"));
+        JPasswordField pwField = new JPasswordField();
+        panel.add(pwField);
 
-    public String getUserId() {
-        return txtUserId.getText();
-    }
-
-    public String getPassword() {
-        return new String(txtPassword.getPassword());
+        int result = JOptionPane.showConfirmDialog(null, panel, "Login", JOptionPane.OK_CANCEL_OPTION);
+        if (result == JOptionPane.OK_OPTION) {
+            String id = idField.getText().trim();
+            String pw = new String(pwField.getPassword()).trim();
+            if (!id.isEmpty()) {
+                boolean success = clientApp.getClientStub().loginCM(id, pw);
+                if (success) {
+                    System.out.println("로그인 요청 전송 완료: ID=" + id);
+                    return true;
+                } else {
+                    System.err.println("로그인 요청 실패!");
+                    return false;
+                }
+            }
+        }
+        return false;
     }
 }

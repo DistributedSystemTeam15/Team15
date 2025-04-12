@@ -1,90 +1,124 @@
 package gui;
 
+import java.awt.BorderLayout;
+import java.awt.event.ActionListener;
 import javax.swing.*;
-import java.awt.*;
-import java.awt.event.*;
+import cm.CMClientApp;
 
-public class MainFrame extends JFrame {
-    private CardLayout cardLayout;
-    private JPanel mainPanel;
+public class MainFrame {
+    private CMClientApp clientApp;
+    private JFrame frame;
+    private DocumentEditScreen editScreen;
+    private JMenuItem newItem, openItem, saveItem, deleteItem;
 
-    private LoginScreen loginScreen;
-    private DocumentListScreen documentListScreen;
-    private DocumentEditScreen documentEditScreen;
-
-    public MainFrame() {
-        setTitle("Distributed System Computing");
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(800, 600);
-
-        cardLayout = new CardLayout();
-        mainPanel = new JPanel(cardLayout);
-
-        // 각 화면 초기화
-        loginScreen = new LoginScreen();
-        documentListScreen = new DocumentListScreen();
-        documentEditScreen = new DocumentEditScreen();
-
-        // CardLayout에 화면 추가 (카드 이름: "login", "list", "edit")
-        mainPanel.add(loginScreen, "login");
-        mainPanel.add(documentListScreen, "list");
-        mainPanel.add(documentEditScreen, "edit");
-        add(mainPanel);
-
-        // 로그인 버튼 클릭 시 -> 문서 목록 화면으로 전환
-        loginScreen.addLoginListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                String userId = loginScreen.getUserId();
-                String password = loginScreen.getPassword();
-                // 여기에 실제 로그인 인증 로직을 추가할 수 있음.
-                System.out.println("로그인 시도: " + userId);
-                // 성공 시 문서 목록 화면 전환
-                showScreen("list");
-            }
-        });
-
-        // 문서 생성 버튼 클릭 시 -> 문서 편집 화면으로 전환 (새 문서 생성)
-        documentListScreen.addCreateListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                System.out.println("문서 생성 버튼 클릭");
-                // 새 문서 생성 로직 추가 후 편집 화면 전환
-                documentEditScreen.setDocumentText(""); // 새 문서 초기화
-                showScreen("edit");
-            }
-        });
-
-        // 문서 삭제 버튼 클릭 시 (예시로 콘솔 출력)
-        documentListScreen.addDeleteListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                System.out.println("문서 삭제 버튼 클릭");
-                // 문서 삭제 로직 추가 가능
-            }
-        });
-
-        // 문서 편집 화면의 저장 버튼 클릭 시 -> 문서 저장 후 문서 목록 화면으로 전환
-        documentEditScreen.addSaveListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                String content = documentEditScreen.getDocumentText();
-                System.out.println("문서 저장: " + content);
-                // 저장 로직 추가 후 목록 화면으로 전환 (또는 다른 동작)
-                showScreen("list");
-            }
-        });
+    public MainFrame(CMClientApp app) {
+        this.clientApp = app;
+        initUI();
     }
 
-    public void showScreen(String name) {
-        cardLayout.show(mainPanel, name);
+    private void initUI() {
+        frame = new JFrame("Shared Editing Client (Asynchronous Version)");
+        frame.setLayout(new BorderLayout());
+
+        // 중앙에 문서 편집 화면 추가
+        editScreen = new DocumentEditScreen(clientApp);
+        frame.add(editScreen, BorderLayout.CENTER);
+
+        // 메뉴 바 생성
+        JMenuBar menuBar = new JMenuBar();
+        JMenu fileMenu = new JMenu("File");
+        newItem = new JMenuItem("New Document");
+        openItem = new JMenuItem("Open Document");
+        saveItem = new JMenuItem("Save");
+        deleteItem = new JMenuItem("Delete Document");
+
+        // 초기 상태: 새, 열기는 활성화 / 저장, 삭제는 문서 열림 시 활성화
+        newItem.setEnabled(true);
+        openItem.setEnabled(true);
+        saveItem.setEnabled(false);
+        deleteItem.setEnabled(false);
+
+        fileMenu.add(newItem);
+        fileMenu.add(openItem);
+        fileMenu.add(saveItem);
+        fileMenu.add(deleteItem);
+        menuBar.add(fileMenu);
+        frame.setJMenuBar(menuBar);
+
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.pack();
+        frame.setLocationRelativeTo(null);
     }
 
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            MainFrame frame = new MainFrame();
-            frame.setLocationRelativeTo(null);
-            frame.setVisible(true);
-        });
+    public void show() {
+        frame.setVisible(true);
+    }
+
+    // ----- 어댑터(Delegation) 메서드: DocumentEditScreen 관련 -----
+    public void updateTextContent(String content) {
+        editScreen.updateTextContent(content);
+    }
+
+    public void resetDocumentView() {
+        editScreen.resetDocumentView();
+    }
+
+    public JTextArea getTextArea() {
+        return editScreen.getTextArea();
+    }
+
+    // ----- 어댑터 메서드: DocumentListScreen 관련 -----
+    public String promptDocumentSelection(String[] docs) {
+        return DocumentListScreen.promptDocumentSelection(docs, frame);
+    }
+
+    public void showNoDocumentsAvailable() {
+        DocumentListScreen.showNoDocumentsAvailable(frame);
+    }
+
+    public String promptDocumentDeletion(String[] docs) {
+        return DocumentListScreen.promptDocumentDeletion(docs, frame);
+    }
+
+    public boolean confirmDocumentDeletion(String doc) {
+        return DocumentListScreen.confirmDocumentDeletion(doc, frame);
+    }
+
+    public void showNoDocumentsForDeletion() {
+        DocumentListScreen.showNoDocumentsForDeletion(frame);
+    }
+
+    public void showUserList(String doc, String users) {
+        DocumentListScreen.showUserList(doc, users, frame);
+    }
+
+    // ----- 액션 리스너 등록용 메서드 -----
+    public void addNewDocumentAction(ActionListener listener) {
+        newItem.addActionListener(listener);
+    }
+
+    public void addOpenDocumentAction(ActionListener listener) {
+        openItem.addActionListener(listener);
+    }
+
+    public void addSaveDocumentAction(ActionListener listener) {
+        saveItem.addActionListener(listener);
+    }
+
+    public void addDeleteDocumentAction(ActionListener listener) {
+        deleteItem.addActionListener(listener);
+    }
+
+    public void setSaveEnabled(boolean enabled) {
+        saveItem.setEnabled(enabled);
+    }
+
+    public void setDeleteEnabled(boolean enabled) {
+        deleteItem.setEnabled(enabled);
+    }
+
+    // Getter: 메인 프레임(다이얼로그 부모 창)
+    public JFrame getFrame() {
+        return frame;
     }
 }
