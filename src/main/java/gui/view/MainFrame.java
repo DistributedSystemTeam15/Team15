@@ -1,8 +1,9 @@
-package gui;
+package gui.view;
 
 import java.awt.BorderLayout;
 import java.awt.event.ActionListener;
 import javax.swing.*;
+
 import cm.CMClientApp;
 
 public class MainFrame {
@@ -120,5 +121,10 @@ public class MainFrame {
     // Getter: 메인 프레임(다이얼로그 부모 창)
     public JFrame getFrame() {
         return frame;
+    }
+
+    // Getter: 내부의 DocumentEditScreen
+    public DocumentEditScreen getDocumentEditScreen() {
+        return editScreen;
     }
 }

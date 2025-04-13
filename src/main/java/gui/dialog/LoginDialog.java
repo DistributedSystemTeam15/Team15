@@ -1,14 +1,14 @@
-package gui;
+package gui.dialog;
 
 import java.awt.GridLayout;
 import javax.swing.*;
 
 import cm.CMClientApp;
 
-public class LoginScreen {
+public class LoginDialog {
     private CMClientApp clientApp;
 
-    public LoginScreen(CMClientApp app) {
+    public LoginDialog(CMClientApp app) {
         this.clientApp = app;
     }
 
