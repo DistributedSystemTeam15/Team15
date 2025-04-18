@@ -3,6 +3,11 @@ package gui.view;
 import java.awt.BorderLayout;
 import java.awt.event.ActionListener;
 import javax.swing.*;
+import javax.swing.border.TitledBorder;
+import java.util.Collection;
+import java.util.stream.Collectors;
+import java.util.List;
+import javax.swing.DefaultListModel;
 
 import cm.CMClientApp;
 
@@ -11,6 +16,8 @@ public class MainFrame {
     private JFrame frame;
     private DocumentEditScreen editScreen;
     private JMenuItem newItem, openItem, saveItem, deleteItem;
+    private DefaultListModel<String> onlineModel;
+    private JList<String> onlineList;
 
     public MainFrame(CMClientApp app) {
         this.clientApp = app;
@@ -24,6 +31,13 @@ public class MainFrame {
         // 중앙에 문서 편집 화면 추가
         editScreen = new DocumentEditScreen(clientApp);
         frame.add(editScreen, BorderLayout.CENTER);
+
+        // 우측에 Online Users 패널
+        onlineModel = new DefaultListModel<>();
+        onlineList  = new JList<>(onlineModel);
+        JScrollPane onlineScroll = new JScrollPane(onlineList);
+        onlineScroll.setBorder(new TitledBorder("Online Users"));
+        frame.add(onlineScroll, BorderLayout.EAST);
 
         // 메뉴 바 생성
         JMenuBar menuBar = new JMenuBar();
@@ -53,6 +67,22 @@ public class MainFrame {
 
     public void show() {
         frame.setVisible(true);
+    }
+
+    /* ======= Online‑user 조작 메서드 ======= */
+    public void addOnlineUser(String user){
+        if(user==null || user.isBlank()) return;
+        if(!onlineModel.contains(user)) onlineModel.addElement(user);
+    }
+    public void removeOnlineUser(String user){
+        onlineModel.removeElement(user);
+    }
+    public void setOnlineUsers(Collection<String> users){
+        onlineModel.clear();
+        users.stream().distinct().forEach(onlineModel::addElement);
+    }
+    public List<String> getOnlineUsers(){
+        return java.util.Collections.list(onlineModel.elements());
     }
 
     // ----- 어댑터(Delegation) 메서드: DocumentEditScreen 관련 -----

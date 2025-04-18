@@ -15,12 +15,14 @@ import kr.ac.konkuk.ccslab.cm.event.CMUserEvent;
 import kr.ac.konkuk.ccslab.cm.event.handler.CMAppEventHandler;
 import kr.ac.konkuk.ccslab.cm.info.CMInfo;
 import kr.ac.konkuk.ccslab.cm.stub.CMServerStub;
+import kr.ac.konkuk.ccslab.cm.event.CMSessionEvent;
 
 public class CMServerEventHandler implements CMAppEventHandler {
-    private CMServerStub m_serverStub;              // 서버 스텁 객체 (클라이언트와 통신)
-    private Map<String, String> documents;          // in-memory에서 문서 내용 관리 (문서명 -> 문서 내용)
-    private Map<String, Set<String>> docUsers;      // 각 문서에 접속한 사용자 집합 (문서명 -> 사용자 집합)
-    private Map<String, String> userCurrentDoc;     // 사용자가 현재 열어둔 문서 정보 (사용자 -> 문서명)
+    private CMServerStub m_serverStub;                       // 서버 스텁 객체 (클라이언트와 통신)
+    private Map<String, String> documents;                   // in-memory에서 문서 내용 관리 (문서명 -> 문서 내용)
+    private Map<String, Set<String>> docUsers;               // 각 문서에 접속한 사용자 집합 (문서명 -> 사용자 집합)
+    private Map<String, String> userCurrentDoc;              // 사용자가 현재 열어둔 문서 정보 (사용자 -> 문서명)
+    private final Set<String> onlineUsers = new HashSet<>(); // 현재 로그인 중인 전체 사용자
 
     // 서버 스텁을 전달받아 내부 데이터 구조를 초기화한다.
     public CMServerEventHandler(CMServerStub serverStub) {
@@ -145,6 +147,29 @@ public class CMServerEventHandler implements CMAppEventHandler {
     @Override
     public void processEvent(CMEvent cme) {
         int nType = cme.getType();
+
+        /* ---------- A. 세션 이벤트: 로그인/로그아웃 ---------- */
+        if (nType == CMInfo.CM_SESSION_EVENT) {
+            CMSessionEvent se = (CMSessionEvent) cme;
+            String user = se.getUserName();
+
+            switch (se.getID()) {
+                case CMSessionEvent.LOGIN -> {
+                    /* 1) 서버 측 온라인 목록 업데이트 */
+                    onlineUsers.add(user);
+                    /* 2) 새로 로그인한 사용자에게 전체 온라인 목록 전송 */
+                    sendOnlineListToClient(user);
+                    /* 3) (기존 사용자들에게는 CM이 알아서 SESSION_ADD_USER 브로드캐스트) */
+                    System.out.println("[SERVER] " + user + " logged in. (online=" + onlineUsers.size() + ")");
+                }
+                case CMSessionEvent.LOGOUT, CMSessionEvent.SESSION_REMOVE_USER -> {
+                    onlineUsers.remove(user);
+                    System.out.println("[SERVER] " + user + " logged out. (online=" + onlineUsers.size() + ")");
+                }
+            }
+            return;  // 세션 이벤트 처리 끝
+        }
+
         if (nType == CMInfo.CM_USER_EVENT) {
             CMUserEvent ue = (CMUserEvent) cme;
             String eventID = ue.getStringID();
@@ -321,8 +346,9 @@ public class CMServerEventHandler implements CMAppEventHandler {
 
     /**
      * 특정 사용자에게 지정된 문서의 내용을 전송한다.
+     *
      * @param targetUser 전송할 대상 사용자
-     * @param docName 문서 이름
+     * @param docName    문서 이름
      */
     private void sendTextUpdateToClient(String targetUser, String docName) {
         String content = documents.get(docName);
@@ -331,5 +357,18 @@ public class CMServerEventHandler implements CMAppEventHandler {
         updateEvent.setStringID("TEXT_UPDATE");
         updateEvent.setEventField(CMInfo.CM_STR, "content", content);
         m_serverStub.send(updateEvent, targetUser);
+    }
+
+    /**
+     * 특정 사용자에게 온라인 목록 전송
+     *
+     * @param targetUser 전송할 대상 사용자
+     */
+    private void sendOnlineListToClient(String targetUser){
+        CMUserEvent listEvt = new CMUserEvent();
+        listEvt.setStringID("ONLINE_LIST");
+        String userStr = String.join(",", onlineUsers);
+        listEvt.setEventField(CMInfo.CM_STR, "users", userStr);
+        m_serverStub.send(listEvt, targetUser);
     }
 }
