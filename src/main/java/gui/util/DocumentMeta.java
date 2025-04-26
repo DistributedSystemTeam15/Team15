@@ -1,0 +1,63 @@
+package gui.util;
+
+import java.util.List;
+import java.util.ArrayList;
+
+public class DocumentMeta {
+    private String name;
+    private String creatorId;
+    private String lastEditorId;
+    private String createdTime;
+    private String lastModifiedTime;
+    private List<String> activeUsers = new ArrayList<>();  // ✅ 추가
+
+    public DocumentMeta(String name, String creatorId, String lastEditorId,
+                        String createdTime, String lastModifiedTime) {
+        this.name = name;
+        this.creatorId = creatorId;
+        this.lastEditorId = lastEditorId;
+        this.createdTime = createdTime;
+        this.lastModifiedTime = lastModifiedTime;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getCreatorId() {
+        return creatorId;
+    }
+
+    public String getLastEditorId() {
+        return lastEditorId;
+    }
+
+    public String getCreatedTime() {
+        return createdTime;
+    }
+
+    public String getLastModifiedTime() {
+        return lastModifiedTime;
+    }
+
+    public List<String> getActiveUsers() {
+        return activeUsers;
+    }
+
+    public void setActiveUsers(List<String> users) {
+        this.activeUsers = users;
+    }
+
+    @Override
+    public String toString() {
+        return name + " (최종수정: " + lastModifiedTime + ")";
+    }
+
+    public String getDetailedInfo() {
+        return "문서 이름: " + name +
+                "\n생성자: " + creatorId +
+                "\n최종 수정자: " + lastEditorId +
+                "\n생성 시간: " + createdTime +
+                "\n수정 시간: " + lastModifiedTime;
+    }
+}
