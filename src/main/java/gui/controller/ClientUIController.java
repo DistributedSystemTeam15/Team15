@@ -45,24 +45,6 @@ public class ClientUIController {
             }
         });
 
-        // Open Document 액션 리스너 등록
-        mainFrame.addOpenDocumentAction(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                // 로그인 직후 즉시 Open Document 호출 시 세션 가입 및 그룹 구성 이벤트가 완료될 때까지
-                // 약간의 지연(500ms)을 두고 Open Document 기능을 실행합니다.
-                Timer timer = new Timer(500, new ActionListener() {
-                    @Override
-                    public void actionPerformed(ActionEvent evt) {
-                        clientApp.openDocument();
-                        System.out.println("Open Document action triggered.");
-                    }
-                });
-                timer.setRepeats(false);
-                timer.start();
-            }
-        });
-
         // Save Document 액션 리스너 등록
         mainFrame.addSaveDocumentAction(new ActionListener() {
             @Override
@@ -74,25 +56,6 @@ public class ClientUIController {
         });
 
         // Delete Document 액션 리스너 등록
-        mainFrame.addDeleteDocumentAction(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                String currentDoc = clientApp.getCurrentDocName();
-                if (currentDoc == null || currentDoc.isEmpty()) {
-                    DialogUtil.showErrorMessage("No document is currently open for deletion.");
-                    return;
-                }
-                boolean confirm = DialogUtil.confirm("Do you really want to delete the current document: " + currentDoc + "?", "Delete Document");
-                if (confirm) {
-                    clientApp.deleteDocument(currentDoc);
-                    // Clear the document view to remove the deleted document's text
-                    mainFrame.getDocumentEditScreen().resetDocumentView();
-                    // Optionally, disable delete button after deletion
-                    mainFrame.setSaveEnabled(false);
-                    mainFrame.setDeleteEnabled(false);
-                    System.out.println("Delete Document action triggered for: " + currentDoc);
-                }
-            }
-        });
+
     }
 }

@@ -11,4 +11,7 @@ public class DialogUtil {
         int answer = JOptionPane.showConfirmDialog(null, message, title, JOptionPane.YES_NO_OPTION);
         return answer == JOptionPane.YES_OPTION;
     }
+    public static void showInfoMessage(String message) {
+        JOptionPane.showMessageDialog(null, message, "알림", JOptionPane.INFORMATION_MESSAGE);
+    }
 }
