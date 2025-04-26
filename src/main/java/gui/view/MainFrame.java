@@ -85,16 +85,16 @@ public class MainFrame {
                     if (selected == null) return;
 
                     JPopupMenu menu = new JPopupMenu();
-                    JMenuItem attrItem = new JMenuItem("속성 보기");
+                    JMenuItem attrItem = new JMenuItem("Document Information");
 
                     attrItem.addActionListener(ev -> {
                         JOptionPane.showMessageDialog(frame,
                                 selected.getDetailedInfo(),
-                                "문서 속성",
+                                "Document Information",
                                 JOptionPane.INFORMATION_MESSAGE);
                     });
 
-                    JMenuItem deleteItem = new JMenuItem("문서 삭제");
+                    JMenuItem deleteItem = new JMenuItem("Delete Document");
 
                     deleteItem.addActionListener(ev -> deleteSelectedDocument());
 
@@ -110,11 +110,11 @@ public class MainFrame {
 
         // 우측 온라인 유저
         onlineModel = new DefaultListModel<>();
-        onlineList  = new JList<>(onlineModel);
+        onlineList = new JList<>(onlineModel);
         JScrollPane onlineScroll = new JScrollPane(onlineList);
         onlineScroll.setBorder(new TitledBorder("Online Users"));
 
-        onlineUserCountLabel = new JLabel("접속자: 0명");
+        onlineUserCountLabel = new JLabel("Total: 0명");
         onlineScroll.setColumnHeaderView(onlineUserCountLabel);
         // 상단 문서 제목 + 사용자 패널
         JPanel topPanel = new JPanel(new BorderLayout());
@@ -155,7 +155,6 @@ public class MainFrame {
         frame.add(toolBar, BorderLayout.NORTH);
 
         // 중앙 패널 구성
-        // 중앙 패널 구성
         JPanel centerPanel = new JPanel(new BorderLayout());
         centerPanel.add(topPanel, BorderLayout.NORTH); // ✅ topPanel은 centerPanel에 추가
 
@@ -193,6 +192,7 @@ public class MainFrame {
     public void show() {
         frame.setVisible(true);
     }
+
     private void updateOnlineUserCount() {
         onlineUserCountLabel.setText("접속자: " + onlineModel.size() + "명");
     }
@@ -204,16 +204,19 @@ public class MainFrame {
             updateOnlineUserCount();  // ✅ 접속자 수 갱신
         }
     }
+
     public void removeOnlineUser(String user) {
         onlineModel.removeElement(user);
         updateOnlineUserCount();  // ✅ 접속자 수 갱신
     }
+
     public void setOnlineUsers(Collection<String> users) {
         onlineModel.clear();
         users.stream().distinct().forEach(onlineModel::addElement);
         updateOnlineUserCount();  // ✅ 접속자 수 갱신
     }
-    public List<String> getOnlineUsers(){
+
+    public List<String> getOnlineUsers() {
         return java.util.Collections.list(onlineModel.elements());
     }
 
@@ -229,19 +232,19 @@ public class MainFrame {
         JTextArea textArea = editScreen.getTextArea();
         textArea.setEditable(false);  // 안내문일 때는 수정 비활성화
         textArea.setText("""
-        📄 공유 텍스트 편집 프로그램
-        개발자: 25년 분산시스템 7팀
-        
-        - 이 프로그램은 여러 사용자가 동시에 문서를 편집할 수 있도록 설계되었습니다.
-        - 문서를 열거나 생성하여 자유롭게 편집할 수 있습니다.
-        - 저장은 Ctrl+S 또는 저장 버튼을 사용하세요.
-        - 실시간으로 다른 사용자의 편집 상황을 볼 수 있습니다.
-
-        ✨ 최신 패치 노트:
-        - 문서 리스트 실시간 반영
-        - 저장시 수정(*) 표시 초기화
-        - 사용자 접속 수 표시
-        """);
+                📄 공유 텍스트 편집 프로그램
+                개발자: 25년 분산시스템 7팀
+                
+                - 이 프로그램은 여러 사용자가 동시에 문서를 편집할 수 있도록 설계되었습니다.
+                - 문서를 열거나 생성하여 자유롭게 편집할 수 있습니다.
+                - 저장은 Ctrl+S 또는 저장 버튼을 사용하세요.
+                - 실시간으로 다른 사용자의 편집 상황을 볼 수 있습니다.
+                
+                ✨ 최신 패치 노트:
+                - 문서 리스트 실시간 반영
+                - 저장시 수정(*) 표시 초기화
+                - 사용자 접속 수 표시
+                """);
     }
 
 
@@ -260,6 +263,7 @@ public class MainFrame {
     public void addNewDocumentAction(ActionListener listener) {
         newItem.addActionListener(listener);
     }
+
     public void addSaveDocumentAction(ActionListener listener) {
         saveItem.addActionListener(listener);
     }
@@ -282,18 +286,23 @@ public class MainFrame {
     public String promptDocumentSelection(String[] docs) {
         return DocumentListScreen.promptDocumentSelection(docs, frame);
     }
+
     public void showNoDocumentsAvailable() {
         DocumentListScreen.showNoDocumentsAvailable(frame);
     }
+
     public void showUserList(String doc, String users) {
         DocumentListScreen.showUserList(doc, users, frame);
     }
+
     public void showNoDocumentsForDeletion() {
         DocumentListScreen.showNoDocumentsForDeletion(frame);
     }
+
     public String promptDocumentDeletion(String[] docNames) {
         return DocumentListScreen.promptDocumentDeletion(docNames, frame);
     }
+
     public boolean confirmDocumentDeletion(String docName) {
         return DocumentListScreen.confirmDocumentDeletion(docName, frame);
     }
@@ -302,6 +311,7 @@ public class MainFrame {
     public void setCurrentDocument(String name) {
         currentDocLabel.setText("📄 " + name);
     }
+
     public void updateDocumentUsers(String docName, List<String> users) {
         for (int i = 0; i < docListModel.getSize(); i++) {
             DocumentMeta meta = docListModel.get(i);
@@ -322,6 +332,7 @@ public class MainFrame {
             currentUsersLabel.setText("👥 " + String.join(", ", users));
         }
     }
+
     public void markDocumentModified() {
         String title = currentDocLabel.getText();
         if (!title.endsWith("*")) {

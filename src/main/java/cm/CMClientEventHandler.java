@@ -192,7 +192,7 @@ public class CMClientEventHandler implements CMAppEventHandler {
                     break;
                 case "LOGIN_REJECTED_DUPLICATE":
                     System.out.println("[CLIENT] 중복 로그인 거부 응답 수신");
-                    DialogUtil.showErrorMessage("이미 로그인된 ID입니다. 다른 ID로 다시 시도하세요.");
+                    DialogUtil.showErrorMessage("This ID is already logged in. Please try again with a different ID.");
 
                     // 연결 종료 후 클라이언트 종료 → main()에서 로그인 반복 가능
                     m_clientStub.terminateCM();
@@ -224,10 +224,10 @@ public class CMClientEventHandler implements CMAppEventHandler {
                         mainFrame.resetDocumentView();
                         mainFrame.setSaveEnabled(false);
                         mainFrame.setDeleteEnabled(false);
-                        DialogUtil.showInfoMessage("현재 작업 중이던 문서가 삭제되었습니다. 메인 화면으로 돌아갑니다.");
+                        DialogUtil.showInfoMessage("The document you were working on has been deleted. It will return to the main screen.");
                     } else {
                         // ✅ 다른 문서라면 경고만
-                        DialogUtil.showErrorMessage("문서 \"" + closedDoc + "\" 가 삭제되어 더 이상 열 수 없습니다.");
+                        DialogUtil.showErrorMessage("Document \"" + closedDoc + "\" has been deleted so can no longer be opened.");
                     }
                     break;
                 }

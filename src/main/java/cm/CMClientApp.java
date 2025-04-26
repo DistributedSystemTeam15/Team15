@@ -144,7 +144,7 @@ public class CMClientApp {
         // 서버 연결 설정
         ServerConfig config = ConnectionDialog.getServerConfig();
         if (config == null) {
-            DialogUtil.showErrorMessage("서버 연결 설정이 취소되었습니다. 프로그램을 종료합니다.");
+            DialogUtil.showErrorMessage("Server connection settings have been canceled. Exit the program.");
             System.exit(0);
         }
         cmStub.setServerAddress(config.getServerIP());
@@ -154,7 +154,7 @@ public class CMClientApp {
         while (true) {
             boolean started = cmStub.startCM();
             if (!started) {
-                DialogUtil.showErrorMessage("서버 연결 실패. IP: " + config.getServerIP());
+                DialogUtil.showErrorMessage("Server connection failed. IP: " + config.getServerIP());
                 System.exit(0);
             }
 
@@ -179,7 +179,7 @@ public class CMClientApp {
 
             // 실패 시 종료 또는 재시도
             cmStub.terminateCM();
-            boolean retry = DialogUtil.confirm("로그인에 실패했습니다. 다시 시도하시겠습니까?", "로그인 재시도");
+            boolean retry = DialogUtil.confirm("Login failed. Do you want to try again?", "Retry Login");
             if (!retry) System.exit(0);
         }
 
