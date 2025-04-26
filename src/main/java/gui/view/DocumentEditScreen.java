@@ -17,10 +17,15 @@ public class DocumentEditScreen extends JPanel {
     private UndoManager undoManager;
     // 플래그: 프로그램에 의한 텍스트 업데이트 시 이벤트 무시
     private boolean ignoreDocEvents = false;
+    private boolean isModified = false;
 
     public DocumentEditScreen(CMClientApp app) {
         this.clientApp = app;
         initUI();
+    }
+    public void markSaved() {
+        isModified = false;
+        clientApp.notifyModified(false);  // 저장됨을 알림
     }
 
     private void initUI() {
@@ -66,7 +71,14 @@ public class DocumentEditScreen extends JPanel {
                 if (ignoreDocEvents) return;
                 String content = textArea.getText();
                 clientApp.sendTextUpdate(content);
+
+                // ✅ 수정 발생 시
+                if (!isModified) {
+                    isModified = true;
+                    clientApp.notifyModified(true);  // 메인프레임에 알려줌
+                }
             }
+
         });
 
         JScrollPane scrollPane = new JScrollPane(textArea);
