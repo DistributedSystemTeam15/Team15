@@ -81,15 +81,20 @@ public final class GuiCallback implements ClientCallback {
             try {
                 JSONArray arr = new JSONArray(json);
                 List<DocumentMeta> list = new ArrayList<>();
+
                 for (int i = 0; i < arr.length(); i++) {
                     JSONObject o = arr.getJSONObject(i);
-                    list.add(new DocumentMeta(
+                    DocumentMeta meta = new DocumentMeta(
                             o.getString("name"),
                             o.getString("creatorId"),
                             o.getString("lastEditorId"),
                             o.getString("createdTime"),
                             o.getString("lastModifiedTime")
-                    ));
+                    );
+                    String users = o.optString("activeUsers", "");
+                    if (!users.isBlank())
+                        meta.setActiveUsers(List.of(users.split(",")));
+                    list.add(meta);
                 }
                 ui.setDocumentList(list);
             } catch (Exception e) {

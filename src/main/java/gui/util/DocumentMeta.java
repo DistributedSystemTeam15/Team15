@@ -45,7 +45,7 @@ public class DocumentMeta {
     }
 
     public void setActiveUsers(List<String> users) {
-        this.activeUsers = users;
+        this.activeUsers = new ArrayList<>(users);
     }
 
     @Override
