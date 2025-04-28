@@ -14,6 +14,12 @@ public class ClientUIController {
     public ClientUIController(MainFrame mainFrame, CMClientApp clientApp) {
         this.mainFrame = mainFrame;
         this.clientApp = clientApp;
+
+        /* 문서 내용이 바뀌면 ‘수정됨’ 표시 */
+        mainFrame.getDocumentEditScreen()
+                .addPropertyChangeListener("localEdit",
+                        evt -> mainFrame.markDocumentModified());
+
         registerActions();
     }
 
@@ -44,12 +50,12 @@ public class ClientUIController {
         });
 
         // Save Document 액션 리스너 등록
-        mainFrame.addSaveDocumentAction(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                clientApp.saveCurrentDocument();
-                System.out.println("Save Document action triggered.");
-            }
+        mainFrame.addSaveDocumentAction(e -> {
+            clientApp.saveCurrentDocument();
+
+            /* 저장 직후 ‘수정됨’ 표시 제거 */
+            mainFrame.markDocumentSaved();
+            System.out.println("Save Document action triggered.");
         });
     }
 }
