@@ -16,15 +16,23 @@ import java.util.stream.Collectors;
  * Swing 등 GUI 코드와 전혀 연결되지 않는다.
  */
 public class CMClientEventHandler implements CMAppEventHandler {
-    private final ClientCallback callback;
+    private volatile ClientCallback callback;
 
     /* 온라인 사용자 캐싱 */
     private final Set<String> pendingOnline = new HashSet<>();
 
-
-    // 생성자: 클라이언트 스텁을 초기화하고, 원격 업데이트 플래그를 false로 설정
     public CMClientEventHandler(ClientCallback cb) {
         this.callback = Objects.requireNonNull(cb);
+    }
+
+    /* 콜백 교체용 setter */
+    public void setCallback(ClientCallback cb) {
+        this.callback = Objects.requireNonNull(cb);
+    }
+
+    /* 현재 캐시를 읽어 갈 수 있도록 getter */
+    public Set<String> getOnlineUsers() {
+        return Set.copyOf(pendingOnline);
     }
 
     /* ------------ CMAppEventHandler ------------ */
