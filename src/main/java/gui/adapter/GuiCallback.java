@@ -38,7 +38,7 @@ public final class GuiCallback implements ClientCallback {
         /* 실패했을 때: 알림 → 연결 해제 → 로그인 창 재호출 */
         if (!success) {
             runEdt(() -> {
-                DialogUtil.showErrorMessage("로그인에 실패했습니다. 다시 시도해 주세요.");
+                DialogUtil.showErrorMessage("Login failed. Please try again.");
 
                 /* ① 서버 연결 해제 */
                 clientCore.disconnect();
@@ -75,7 +75,7 @@ public final class GuiCallback implements ClientCallback {
     public void onDocumentListReceived(String json) {
         runEdt(() -> {
             if (json.isBlank()) {
-                ui.showNoDocumentsAvailable();
+                DialogUtil.showInfoMessage("No documents are available.");
                 return;
             }
             try {
@@ -99,7 +99,7 @@ public final class GuiCallback implements ClientCallback {
                 ui.setDocumentList(list);
             } catch (Exception e) {
                 e.printStackTrace();
-                ui.showNoDocumentsAvailable();
+                DialogUtil.showInfoMessage("No documents are available.");
             }
         });
     }

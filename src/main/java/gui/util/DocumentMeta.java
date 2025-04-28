@@ -50,14 +50,14 @@ public class DocumentMeta {
 
     @Override
     public String toString() {
-        return name + " (최종수정: " + lastModifiedTime + ")";
+        return name + " (Last Modified Time: " + lastModifiedTime + ")";
     }
 
     public String getDetailedInfo() {
-        return "문서 이름: " + name +
-                "\n생성자: " + creatorId +
-                "\n최종 수정자: " + lastEditorId +
-                "\n생성 시간: " + createdTime +
-                "\n수정 시간: " + lastModifiedTime;
+        return "Document Name: " + name +
+                "\nCreator ID: " + creatorId +
+                "\nLast Editor ID: " + lastEditorId +
+                "\nCreated Time: " + createdTime +
+                "\nLast Modified Time: " + lastModifiedTime;
     }
 }

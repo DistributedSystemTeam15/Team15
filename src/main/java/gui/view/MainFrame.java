@@ -263,30 +263,6 @@ public class MainFrame {
         });
     }
 
-    public String promptDocumentSelection(String[] docs) {
-        return DocumentListScreen.promptDocumentSelection(docs, frame);
-    }
-
-    public void showNoDocumentsAvailable() {
-        DocumentListScreen.showNoDocumentsAvailable(frame);
-    }
-
-    public void showUserList(String doc, String users) {
-        DocumentListScreen.showUserList(doc, users, frame);
-    }
-
-    public void showNoDocumentsForDeletion() {
-        DocumentListScreen.showNoDocumentsForDeletion(frame);
-    }
-
-    public String promptDocumentDeletion(String[] docNames) {
-        return DocumentListScreen.promptDocumentDeletion(docNames, frame);
-    }
-
-    public boolean confirmDocumentDeletion(String docName) {
-        return DocumentListScreen.confirmDocumentDeletion(docName, frame);
-    }
-
     // ✅ 상단 문서 제목 갱신
     public void setCurrentDocument(String name) {
         currentDocLabel.setText("📄 " + name);
