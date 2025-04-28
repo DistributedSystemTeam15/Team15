@@ -103,9 +103,6 @@ public class CMClientApp {
 
     public void deleteDocument(String name) {
         sendUserEvent("DELETE_DOC", "name", name);
-        if (name.equals(state.getCurrentDoc())) {
-            state.setCurrentDoc(null);
-        }
     }
 
     public void requestDocumentList() {
