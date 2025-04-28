@@ -142,7 +142,7 @@ public class MainFrame {
         saveBtn.setToolTipText("Save");
         saveBtn.addActionListener(ev -> {
             if (saveItem.isEnabled()) {
-                clientApp.saveCurrentDocument();
+                saveItem.doClick();
             }
         });
         toolBar.add(saveBtn);
@@ -174,7 +174,7 @@ public class MainFrame {
             @Override
             public void actionPerformed(ActionEvent e) {
                 if (saveItem.isEnabled()) {  // 저장 활성화된 경우만
-                    clientApp.saveCurrentDocument();
+                    saveItem.doClick();
                 }
             }
         });

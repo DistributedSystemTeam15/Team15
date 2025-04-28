@@ -44,6 +44,9 @@ public class DocumentEditScreen extends JPanel {
             private void changed() {
                 if (ignore) return;
                 core.editCurrentDocument(textArea.getText());
+
+                /* ✅ 로컬에서 문서가 변경됐음을 알림 */
+                firePropertyChange("localEdit", false, true);
             }
 
             public void insertUpdate(DocumentEvent e) {
