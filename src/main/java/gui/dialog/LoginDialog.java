@@ -6,7 +6,7 @@ import javax.swing.*;
 import cm.CMClientApp;
 
 public class LoginDialog {
-    private CMClientApp clientApp;
+    private final CMClientApp clientApp;
 
     public LoginDialog(CMClientApp app) {
         this.clientApp = app;
@@ -18,25 +18,20 @@ public class LoginDialog {
         panel.add(new JLabel("ID:"));
         JTextField idField = new JTextField();
         panel.add(idField);
+
         panel.add(new JLabel("Password:"));
         JPasswordField pwField = new JPasswordField();
         panel.add(pwField);
 
         int result = JOptionPane.showConfirmDialog(null, panel, "Login", JOptionPane.OK_CANCEL_OPTION);
-        if (result == JOptionPane.OK_OPTION) {
-            String id = idField.getText().trim();
-            String pw = new String(pwField.getPassword()).trim();
-            if (!id.isEmpty()) {
-                boolean success = clientApp.getClientStub().loginCM(id, pw);
-                if (success) {
-                    System.out.println("로그인 요청 전송 완료: ID=" + id);
-                    return true;
-                } else {
-                    System.err.println("로그인 요청 실패!");
-                    return false;
-                }
-            }
-        }
-        return false;
+        if (result != JOptionPane.OK_OPTION) return false;
+
+        String id = idField.getText().trim();
+        String pw = new String(pwField.getPassword()).trim();
+        if (id.isEmpty()) return false;
+
+        clientApp.loginAsync(id, pw);                // 비동기 로그인 요청
+        System.out.println("로그인 요청 전송 완료: ID=" + id);
+        return true;                                 // 요청 전송 성공
     }
 }

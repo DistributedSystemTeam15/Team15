@@ -18,6 +18,7 @@ import kr.ac.konkuk.ccslab.cm.stub.CMServerStub;
 import kr.ac.konkuk.ccslab.cm.event.CMSessionEvent;
 import org.json.JSONArray;
 import org.json.JSONObject;
+
 import java.util.Date;
 
 
@@ -25,12 +26,14 @@ public class CMServerEventHandler implements CMAppEventHandler {
     private CMServerStub m_serverStub;                       // 서버 스텁 객체 (클라이언트와 통신)
     private Map<String, String> documents;                   // in-memory에서 문서 내용 관리 (문서명 -> 문서 내용)
     private Map<String, Set<String>> docUsers;
+
     private static class MetaInfo {
         String creatorId;
         String lastEditorId;
         long createdTime;
         long lastModifiedTime;
     }
+
     private Map<String, MetaInfo> docMeta = new HashMap<>();
 
     // 각 문서에 접속한 사용자 집합 (문서명 -> 사용자 집합)
@@ -113,30 +116,6 @@ public class CMServerEventHandler implements CMAppEventHandler {
     }
 
     /**
-     * documents 폴더 내의 모든 .txt 파일 이름(확장자 제외)을 배열로 반환한다.
-     *
-     * @return 문서 이름 배열
-     */
-    private String[] getDocumentFileList() {
-        File folder = new File(DOC_FOLDER);
-        if (!folder.exists()) {
-            folder.mkdir();
-        }
-        File[] files = folder.listFiles((dir, name) -> name.endsWith(".txt"));
-        if (files != null && files.length > 0) {
-            String[] names = new String[files.length];
-            for (int i = 0; i < files.length; i++) {
-                String fileName = files[i].getName();
-                // ".txt" 확장자 제거
-                names[i] = fileName.substring(0, fileName.lastIndexOf(".txt"));
-            }
-            return names;
-        } else {
-            return new String[0];
-        }
-    }
-
-    /**
      * 실제 파일 시스템에서 지정된 문서 파일을 삭제한다.
      *
      * @param docName 삭제할 문서 이름
@@ -159,6 +138,7 @@ public class CMServerEventHandler implements CMAppEventHandler {
         }
         return false;
     }
+
     private void sendDocContentToClient(String user, String docName) {
         String content = documents.get(docName);
         if (content == null) content = "";
@@ -168,7 +148,6 @@ public class CMServerEventHandler implements CMAppEventHandler {
         docEvt.setEventField(CMInfo.CM_STR, "content", content);
         m_serverStub.send(docEvt, user);
     }
-
 
 
     /**
@@ -296,7 +275,7 @@ public class CMServerEventHandler implements CMAppEventHandler {
                     docUsers.get(docNameToSelect).add(user);
                     userCurrentDoc.put(user, docNameToSelect);
 
-// ✅ 현재 문서 사용자 리스트만 전송 (중복 제거)
+                    // ✅ 현재 문서 사용자 리스트만 전송 (중복 제거)
                     broadcastUserList(docNameToSelect);
 
                     sendDocContentToClient(user, docNameToSelect);
@@ -322,7 +301,6 @@ public class CMServerEventHandler implements CMAppEventHandler {
                     }
 
                     System.out.println("문서 [" + docName + "] 업데이트 by [" + user + "]: 길이=" + newContent.length());
-
 
                     // 해당 문서에 참여 중인 다른 사용자들에게 업데이트 전송
                     Set<String> participants = docUsers.get(docName);
@@ -457,7 +435,7 @@ public class CMServerEventHandler implements CMAppEventHandler {
      *
      * @param targetUser 전송할 대상 사용자
      */
-    private void sendOnlineListToClient(String targetUser){
+    private void sendOnlineListToClient(String targetUser) {
         CMUserEvent listEvt = new CMUserEvent();
         listEvt.setStringID("ONLINE_LIST");
         String userStr = String.join(",", onlineUsers);
