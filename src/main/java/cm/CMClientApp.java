@@ -22,7 +22,6 @@ public class CMClientApp {
     private String currentDocName = "";     // 현재 열려 있는 문서의 이름
 
 
-
     // 생성자: 클라이언트 스텁 및 이벤트 핸들러를 초기화하고, 상태를 초기화함
     public CMClientApp() {
         m_clientStub = new CMClientStub();
@@ -76,7 +75,7 @@ public class CMClientApp {
         createEvt.setEventField(CMInfo.CM_STR, "name", docName);
         m_clientStub.send(createEvt, "SERVER");
 
-// 현재 작업중 문서 이름 설정
+        // 현재 작업중 문서 이름 설정
         setCurrentDocName(docName);
         System.out.println("New document creation event sent: " + docName);
 
@@ -128,6 +127,7 @@ public class CMClientApp {
         m_clientStub.send(listDocsEvent, "SERVER");
         System.out.println("LIST_DOCS 이벤트 전송됨.");
     }
+
     public void notifyModified(boolean modified) {
         if (modified) {
             getClientEventHandler().getMainFrame().markDocumentModified();
@@ -149,6 +149,9 @@ public class CMClientApp {
         }
         cmStub.setServerAddress(config.getServerIP());
         cmStub.setServerPort(config.getPort());
+
+        MainFrame mainFrame = new MainFrame(clientApp);
+        clientApp.getClientEventHandler().setClientUI(mainFrame);
 
         // 서버 연결 및 로그인 반복 루프
         while (true) {
@@ -183,10 +186,7 @@ public class CMClientApp {
             if (!retry) System.exit(0);
         }
 
-
         // 로그인 성공 시 메인 UI 띄우기
-        MainFrame mainFrame = new MainFrame(clientApp);
-        clientApp.getClientEventHandler().setClientUI(mainFrame);
         new ClientUIController(mainFrame, clientApp);
         mainFrame.show();
     }
