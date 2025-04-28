@@ -13,6 +13,8 @@ import java.util.List;
 
 import cm.CMClientApp;
 import gui.util.DocumentMeta;
+import gui.util.DialogUtil;
+
 
 public class MainFrame {
     private CMClientApp clientApp;
@@ -176,9 +178,6 @@ public class MainFrame {
                 }
             }
         });
-
-        // ★ 창이 준비되면 서버에 목록을 요청해 초기 리스트를 채움
-        clientApp.requestDocumentList();
     }
 
     public void show() {
@@ -214,7 +213,7 @@ public class MainFrame {
     }
 
     public void resetDocumentView() {
-        setCurrentDocument("📄 공유 텍스트 에디터");
+        setCurrentDocument("📄 Shared Text Editor");
         setCurrentDocumentUsers(List.of());
 
         // 텍스트 영역에 기본 설명 넣기
@@ -311,7 +310,7 @@ public class MainFrame {
     // ✅ 상단 접속 사용자 리스트 갱신
     public void setCurrentDocumentUsers(List<String> users) {
         if (users == null || users.isEmpty()) {
-            currentUsersLabel.setText("👥 접속자 없음");
+            currentUsersLabel.setText("👥 No online users");
         } else {
             currentUsersLabel.setText("👥 " + String.join(", ", users));
         }
@@ -334,13 +333,11 @@ public class MainFrame {
     public void deleteSelectedDocument() {
         DocumentMeta sel = docList.getSelectedValue();
         if (sel == null) {
-            JOptionPane.showMessageDialog(frame, "삭제할 문서를 선택하세요.", "문서 삭제", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(frame, "Select the document you want to delete.", "Delete document", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        int ok = JOptionPane.showConfirmDialog(frame,
-                "문서 \"" + sel.getName() + "\" 을(를) 삭제하시겠습니까?",
-                "문서 삭제 확인", JOptionPane.YES_NO_OPTION);
-        if (ok == JOptionPane.YES_OPTION) {
+
+        if (DialogUtil.confirm("Delete the document \"" + sel.getName() + "\"?", "Confirm document deletion")) {
             clientApp.deleteDocument(sel.getName());            // ★ Core API 호출
         }
     }

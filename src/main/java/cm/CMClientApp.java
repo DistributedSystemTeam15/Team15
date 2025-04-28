@@ -14,6 +14,9 @@ import kr.ac.konkuk.ccslab.cm.event.CMUserEvent;
 import kr.ac.konkuk.ccslab.cm.info.CMInfo;
 import kr.ac.konkuk.ccslab.cm.stub.CMClientStub;
 
+import java.util.List;
+import java.util.Set;
+
 
 /**
  * * CM 라이브러리 초기화 / 서버 연결
@@ -26,34 +29,39 @@ public class CMClientApp {
 
     /* ---------- Core Fields ---------- */
     private final ClientState state = new ClientState();
-    private final CMClientStub stub = new CMClientStub();
-
-    /* GUI, 테스트 코드 등이 주입해야 하는 콜백 */
-    private ClientCallback callback;
-    private CMClientEventHandler handler;
+    private final CMClientStub stub;
+    private final CMClientEventHandler handler;
 
     /* ---------- Constructor ---------- */
     public CMClientApp() {
-        /* ❶ 최소 기능만 수행하는 임시 콜백 */
-        this.callback = new ClientCallback() {
-            @Override public void onLoginResult(boolean ok) { state.setLoggedIn(ok); }
-            /* 나머지 메서드는 빈 구현 */
+        /* 임시 콜백 (로그인 결과만 반영하면 충분) */
+        ClientCallback temp = new ClientCallback() {
+            @Override public void onLoginResult(boolean ok) {
+                state.setLoggedIn(ok);          // ★ 로그인 상태 저장
+            }
+            @Override public void onOnlineUsersUpdated(Set<String> u) {}
             @Override public void onDocumentListReceived(String j) {}
             @Override public void onDocumentContentReceived(String d, String c) {}
-            @Override public void onOnlineUsersUpdated(java.util.Set<String> u) {}
             @Override public void onDocumentClosed(String d) {}
+            @Override public void onDocumentUserList(String doc, List<String> users) {}
         };
 
-        /* ❷ 임시 콜백을 갖는 핸들러를 먼저 등록 */
-        this.handler = new CMClientEventHandler(callback);
+        /* 실제 Stub/Handler 한 번만 생성 */
+        this.stub    = new CMClientStub();
+        this.handler = new CMClientEventHandler(temp);
         stub.setAppEventHandler(handler);
     }
 
     /* 로그인 후 GUI를 만든 뒤 호출해서 콜백을 주입 */
-    public void attachCallback(ClientCallback cb) {
-        this.callback = cb;
-        this.handler = new CMClientEventHandler(cb);
-        stub.setAppEventHandler(handler);
+    public void attachCallback(ClientCallback guiCb) {
+        /* ▶ 핸들러 교체 대신 콜백만 바꾼다 */
+        handler.setCallback(guiCb);
+
+        /* ▶ 이미 받은 온라인 사용자 목록을 GUI 에 즉시 전달 */
+        guiCb.onOnlineUsersUpdated(handler.getOnlineUsers());
+
+        /* ▶ 문서 목록도 다시 받아 오면 UI 초기화 완벽 */
+        requestDocumentList();
     }
 
     /* ---------- Connection ---------- */
