@@ -310,7 +310,7 @@ public class MainFrame {
     // ✅ 상단 접속 사용자 리스트 갱신
     public void setCurrentDocumentUsers(List<String> users) {
         if (users == null || users.isEmpty()) {
-            currentUsersLabel.setText("👥 No online users");
+            currentUsersLabel.setText("Please select the document to edit");
         } else {
             currentUsersLabel.setText("👥 " + String.join(", ", users));
         }

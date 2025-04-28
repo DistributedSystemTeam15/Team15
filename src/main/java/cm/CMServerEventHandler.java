@@ -385,32 +385,32 @@ public class CMServerEventHandler implements CMAppEventHandler {
                         System.out.println("Delete failed: Document [" + toDelete + "] does not exist.");
                         break;
                     }
-                    // 삭제 전, 해당 문서의 사용자들에게 알림 전송
+
                     String requester = ue.getSender();
-                    Set<String> usersToNotify = docUsers.getOrDefault(toDelete, Set.of());
-                    for (String u : usersToNotify) {
-                        if (!u.equals(requester)) {
-                            CMUserEvent kickEvt = new CMUserEvent();
-                            kickEvt.setStringID("DOC_CLOSED");
-                            kickEvt.setEventField(CMInfo.CM_STR, "name", toDelete);
-                            m_serverStub.send(kickEvt, u);
-                        }
+
+                    /* 삭제되기 전에 모든 참여자(요청자 포함)에게 문서-종료 알림 */
+                    Set<String> participants = new HashSet<>(docUsers.getOrDefault(toDelete, Set.of()));
+                    participants.add(requester);                       // ← 요청자 자신도 포함
+                    for (String u : participants) {
+                        CMUserEvent closed = new CMUserEvent();
+                        closed.setStringID("DOC_CLOSED");
+                        closed.setEventField(CMInfo.CM_STR, "name", toDelete);
+                        m_serverStub.send(closed, u);
                     }
 
-                    // in-memory 데이터에서 해당 문서를 삭제
+                    /* in-memory 구조 업데이트 */
                     documents.remove(toDelete);
                     docUsers.remove(toDelete);
-                    for (String u : userCurrentDoc.keySet()) {
-                        if (toDelete.equals(userCurrentDoc.get(u))) {
-                            userCurrentDoc.put(u, null);
-                        }
-                    }
-                    // 실제 파일 시스템에서 문서 파일 삭제
+                    userCurrentDoc.entrySet().removeIf(e -> toDelete.equals(e.getValue()));
+
+                    /* 파일 삭제 */
                     if (deleteDocumentFile(toDelete)) {
-                        System.out.println("Document [" + toDelete + "] successfully deleted from disk and memory.");
+                        System.out.println("Document [" + toDelete + "] deleted by " + requester);
                     } else {
                         System.err.println("Document [" + toDelete + "] removed from memory, but file deletion failed.");
                     }
+
+                    /* 문서 목록 갱신 브로드캐스트 */
                     broadcastDocumentList();
                     break;
                 }
