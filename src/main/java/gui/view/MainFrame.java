@@ -159,6 +159,9 @@ public class MainFrame {
         center.add(split, BorderLayout.CENTER);
         frame.add(center, BorderLayout.CENTER);  // ✅ frame에는 centerPanel만 넣기
 
+        /* 초기 진입 시 기본 안내 화면을 즉시 표시 */
+        showWelcomeScreen();
+
         // ✅ Ctrl+S 누르면 저장
         InputMap im = frame.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
         ActionMap am = frame.getRootPane().getActionMap();
@@ -206,7 +209,7 @@ public class MainFrame {
         editScreen.updateTextContent(content);
     }
 
-    public void resetDocumentView() {
+    public void showWelcomeScreen() {
         setCurrentDocument("📄 Shared Text Editor");
         setCurrentDocumentUsers(List.of());
 
