@@ -114,7 +114,7 @@ public class MainFrame {
         JScrollPane onlineScroll = new JScrollPane(onlineList);
         onlineScroll.setBorder(new TitledBorder("Online Users"));
 
-        onlineUserCountLabel = new JLabel("Total: 0명");
+        onlineUserCountLabel = new JLabel("Total: 0");
         onlineScroll.setColumnHeaderView(onlineUserCountLabel);
         // 상단 문서 제목 + 사용자 패널
         JPanel topPanel = new JPanel(new BorderLayout());
@@ -139,10 +139,10 @@ public class MainFrame {
         fileMenu.add(saveItem);
         //fileMenu.add(deleteItem);
         menuBar.add(fileMenu);
-// (1) 상단 메뉴바 추가
+        // (1) 상단 메뉴바 추가
         frame.setJMenuBar(menuBar);
 
-// (2) ✅ 여기 다음에 툴바 추가
+        // (2) ✅ 여기 다음에 툴바 추가
         JToolBar toolBar = new JToolBar();
         JButton saveButton = new JButton("💾"); // 아이콘 없으면 텍스트로 대체 (임시)
         saveButton.setToolTipText("저장");
@@ -158,17 +158,17 @@ public class MainFrame {
         JPanel centerPanel = new JPanel(new BorderLayout());
         centerPanel.add(topPanel, BorderLayout.NORTH); // ✅ topPanel은 centerPanel에 추가
 
-// 오른쪽: 에디터와 접속자 패널을 나누는 스플릿
+        // 오른쪽: 에디터와 접속자 패널을 나누는 스플릿
         JSplitPane rightSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, editScreen, onlineScroll);
         rightSplit.setDividerLocation(700);
         rightSplit.setResizeWeight(1.0);
 
-// 문서 목록 + 오른쪽을 나누는 스플릿
+        // 문서 목록 + 오른쪽을 나누는 스플릿
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, docScroll, rightSplit);
         splitPane.setDividerLocation(250);
         splitPane.setResizeWeight(0);
 
-// ✅ 중앙 전체 패널 구성 완료
+        // ✅ 중앙 전체 패널 구성 완료
         centerPanel.add(splitPane, BorderLayout.CENTER);
         frame.add(centerPanel, BorderLayout.CENTER);  // ✅ frame에는 centerPanel만 넣기
 
@@ -194,7 +194,7 @@ public class MainFrame {
     }
 
     private void updateOnlineUserCount() {
-        onlineUserCountLabel.setText("접속자: " + onlineModel.size() + "명");
+        onlineUserCountLabel.setText("Total: " + onlineModel.size());
     }
 
     public void addOnlineUser(String user) {
@@ -246,7 +246,6 @@ public class MainFrame {
                 - 사용자 접속 수 표시
                 """);
     }
-
 
     public JTextArea getTextArea() {
         return editScreen.getTextArea();
@@ -386,5 +385,4 @@ public class MainFrame {
             }
         }
     }
-
 }
