@@ -125,12 +125,6 @@ public class MainFrame {
         saveItem = new JMenuItem("Save");
         saveItem.setEnabled(false);
 
-        // New Document 액션
-        newItem.addActionListener(ev -> {
-            String name = JOptionPane.showInputDialog(frame, "Name New Document:");
-            if (name != null && !name.isBlank()) clientApp.createDocument(name.trim());
-        });
-
         fileMenu.add(newItem);
         fileMenu.add(saveItem);
         menuBar.add(fileMenu);
