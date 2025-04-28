@@ -127,7 +127,7 @@ public final class GuiCallback implements ClientCallback {
         runEdt(() -> {
             if (name.equals(clientCore.getCurrentDocName())) {
                 clientCore.setCurrentDocName(null);
-                ui.resetDocumentView();
+                ui.showWelcomeScreen();
                 ui.setSaveEnabled(false);
                 DialogUtil.showInfoMessage(
                         "The document \"" + name + "\" you were editing was deleted.");
