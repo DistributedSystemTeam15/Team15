@@ -222,9 +222,18 @@ public class CMServerEventHandler implements CMAppEventHandler {
                         break;
                     }
 
-                    // 새 문서를 in-memory에 추가 (초기 내용은 빈 문자열)
+                    /* 사용자가 이미 편집 중이던 문서에서 제거 */
+                    if (userCurrentDoc.containsKey(user)) {
+                        String prevDoc = userCurrentDoc.get(user);
+                        if (prevDoc != null && docUsers.containsKey(prevDoc)) {
+                            docUsers.get(prevDoc).remove(user);
+                            broadcastUserList(prevDoc);           // 이전 문서 참여자 갱신
+                        }
+                    }
+
+                    /* 새 문서를 생성하고 사용자 등록 */
                     documents.put(docNameToCreate, "");
-                    // 문서 생성 직후
+
                     MetaInfo meta = new MetaInfo();
                     meta.creatorId = user;
                     meta.lastEditorId = user;
@@ -240,10 +249,11 @@ public class CMServerEventHandler implements CMAppEventHandler {
                     userCurrentDoc.put(user, docNameToCreate);
                     System.out.println("새 문서 생성: [" + docNameToCreate + "], 생성자: " + user);
 
-                    // 생성된 문서를 해당 사용자에게 전송하여 편집 화면 업데이트 요청
+                    /* 클라이언트에 반영 */
                     sendTextUpdateToClient(user, docNameToCreate);
                     broadcastDocumentList();
                     sendDocContentToClient(user, docNameToCreate);  // 생성 직후 문서 내용 보내기
+                    broadcastUserList(docNameToCreate);
                     break;
                 }
 
