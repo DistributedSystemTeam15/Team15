@@ -1,195 +1,188 @@
 package cm;
 
-import gui.dialog.ConnectionDialog;
-import gui.util.DialogUtil;
-import gui.dialog.LoginDialog;
-import gui.view.MainFrame;
-import gui.util.ServerConfig;
-import gui.controller.ClientUIController;
+import cm.core.ClientCallback;
+import cm.model.ClientState;
 
+import gui.adapter.GuiCallback;
+import gui.controller.ClientUIController;
+import gui.dialog.ConnectionDialog;
+import gui.dialog.LoginDialog;
+import gui.util.DialogUtil;
+import gui.util.ServerConfig;
+import gui.view.MainFrame;
 import kr.ac.konkuk.ccslab.cm.event.CMUserEvent;
 import kr.ac.konkuk.ccslab.cm.info.CMInfo;
 import kr.ac.konkuk.ccslab.cm.stub.CMClientStub;
 
+import java.util.List;
+import java.util.Set;
+
+
+/**
+ * * CM 라이브러리 초기화 / 서버 연결
+ * * 비즈니스 API (문서 생성·선택·편집·저장·삭제)
+ * * 이벤트 처리 어댑터(CMClientEventHandler) 포함
+ * * 상태는 cm.model.ClientState 로 관리
+ * * GUI 와는 ClientCallback 인터페이스로만 통신
+ */
 public class CMClientApp {
-    // CM 클라이언트 스텁: 서버와 통신하는 핵심 객체
-    private CMClientStub m_clientStub;
-    // 이벤트 핸들러 객체: 서버로부터 전달받은 이벤트를 처리
-    private CMClientEventHandler m_eventHandler;
 
-    // 문서 관리 관련 필드들
-    private boolean docOpen;                // 현재 문서가 열려 있는지 여부 (초기 false)
-    private String currentDocName = "";     // 현재 열려 있는 문서의 이름
+    /* ---------- Core Fields ---------- */
+    private final ClientState state = new ClientState();
+    private final CMClientStub stub;
+    private final CMClientEventHandler handler;
 
-
-    // 생성자: 클라이언트 스텁 및 이벤트 핸들러를 초기화하고, 상태를 초기화함
+    /* ---------- Constructor ---------- */
     public CMClientApp() {
-        m_clientStub = new CMClientStub();
-        m_eventHandler = new CMClientEventHandler(m_clientStub);
-        // 이벤트 핸들러에 현재 CMClientApp 인스턴스 참조를 설정하여 클라이언트 상태에 접근할 수 있도록 함
-        m_eventHandler.setClientApp(this);
-        docOpen = false;
+        /* 임시 콜백 (로그인 결과만 반영하면 충분) */
+        ClientCallback temp = new ClientCallback() {
+            @Override public void onLoginResult(boolean ok) {
+                state.setLoggedIn(ok);          // ★ 로그인 상태 저장
+            }
+            @Override public void onOnlineUsersUpdated(Set<String> u) {}
+            @Override public void onDocumentListReceived(String j) {}
+            @Override public void onDocumentContentReceived(String d, String c) {}
+            @Override public void onDocumentClosed(String d) {}
+            @Override public void onDocumentUserList(String doc, List<String> users) {}
+        };
+
+        /* 실제 Stub/Handler 한 번만 생성 */
+        this.stub    = new CMClientStub();
+        this.handler = new CMClientEventHandler(temp);
+        stub.setAppEventHandler(handler);
     }
 
-    // 로그인 승인 결과를 저장하는 변수
-    private boolean loginResult = false;
+    /* 로그인 후 GUI를 만든 뒤 호출해서 콜백을 주입 */
+    public void attachCallback(ClientCallback guiCb) {
+        /* ▶ 핸들러 교체 대신 콜백만 바꾼다 */
+        handler.setCallback(guiCb);
 
-    public void setLoginResult(boolean result) {
-        this.loginResult = result;
+        /* ▶ 이미 받은 온라인 사용자 목록을 GUI 에 즉시 전달 */
+        guiCb.onOnlineUsersUpdated(handler.getOnlineUsers());
+
+        /* ▶ 문서 목록도 다시 받아 오면 UI 초기화 완벽 */
+        requestDocumentList();
     }
 
-    public boolean getLoginResult() {
-        return this.loginResult;
+    /* ---------- Connection ---------- */
+    public boolean connect(String serverIp, int port) {
+        stub.setServerAddress(serverIp);
+        stub.setServerPort(port);
+        return stub.startCM();
     }
 
-    public CMClientStub getClientStub() {
-        return m_clientStub;
+    public void disconnect() {
+        stub.terminateCM();
+        state.setLoggedIn(false);
     }
 
-    public CMClientEventHandler getClientEventHandler() {
-        return m_eventHandler;
+    /* ---------- Login ---------- */
+    public void loginAsync(String userId, String password) {
+        state.setLoggedIn(false);
+        stub.loginCM(userId, password);     // 결과는 이벤트 → callback.onLoginResult
     }
 
-    public boolean isDocOpen() {
-        return docOpen;
+    /* ---------- Business API ---------- */
+    public void createDocument(String name) {
+        sendUserEvent("CREATE_DOC", "name", name);
+        state.setCurrentDoc(name);
     }
 
-    public void setDocOpen(boolean open) {
-        docOpen = open;
+    public void selectDocument(String name) {
+        sendUserEvent("SELECT_DOC", "name", name);
+        state.setCurrentDoc(name);
     }
 
-    public void setCurrentDocName(String name) {
-        currentDocName = name;
+    public void editCurrentDocument(String newContent) {
+        sendUserEvent("EDIT_DOC", "content", newContent);
+    }
+
+    public void saveCurrentDocument() {
+        sendUserEvent("SAVE_DOC", null, null);
+    }
+
+    public void deleteDocument(String name) {
+        sendUserEvent("DELETE_DOC", "name", name);
+    }
+
+    public void requestDocumentList() {
+        sendUserEvent("LIST_DOCS", null, null);
+    }
+
+    /* ---------- Helper ---------- */
+    private void sendUserEvent(String id, String key, String value) {
+        CMUserEvent ev = new CMUserEvent();
+        ev.setStringID(id);
+        if (key != null && value != null) {
+            ev.setEventField(CMInfo.CM_STR, key, value);
+        }
+        stub.send(ev, "SERVER");
+    }
+
+    /* ---------- Getters ---------- */
+    public ClientState getState() {
+        return state;
+    }
+
+    public CMClientStub getStub() {
+        return stub;
     }
 
     public String getCurrentDocName() {
-        return currentDocName;
+        return state.getCurrentDoc();
     }
 
-    // 새 문서 생성 시, 서버로 CREATE_DOC 이벤트를 전송하는 메서드
-    public void createNewDocument(String docName) {
-        setCurrentDocName(docName);
-        // 문서 생성 요청 보낸 뒤, 현재 선택 문서명 저장
-        CMUserEvent createEvt = new CMUserEvent();
-        createEvt.setStringID("CREATE_DOC");
-        createEvt.setEventField(CMInfo.CM_STR, "name", docName);
-        m_clientStub.send(createEvt, "SERVER");
-
-        // 현재 작업중 문서 이름 설정
-        setCurrentDocName(docName);
-        System.out.println("New document creation event sent: " + docName);
-
-        // ✅ 문서 생성 직후 목록 재요청
-        CMUserEvent listReq = new CMUserEvent();
-        listReq.setStringID("LIST_DOCS");
-        m_clientStub.send(listReq, "SERVER");
-        System.out.println("LIST_DOCS 요청 (문서 생성 직후)");
+    public void setCurrentDocName(String name) {
+        state.setCurrentDoc(name);
     }
 
-
-    // 문서 편집 시 텍스트 변경 이벤트를 서버에 전송하는 메서드
-    public void sendTextUpdate(String content) {
-        CMUserEvent event = new CMUserEvent();
-        event.setStringID("EDIT_DOC");
-        event.setEventField(CMInfo.CM_STR, "content", content);
-        m_clientStub.send(event, "SERVER");
-        System.out.println("텍스트 변경 이벤트 전송됨. 길이: " + content.length());
+    public boolean isDocOpen() {
+        return state.isDocOpen();
     }
 
-    // 문서 저장 시 SAVE_DOC 이벤트를 서버에 전송하는 메서드
-    public void saveDocument() {
-        CMUserEvent saveEvent = new CMUserEvent();
-        saveEvent.setStringID("SAVE_DOC");
-        m_clientStub.send(saveEvent, "SERVER");
-        System.out.println("SAVE_DOC 이벤트 전송됨.");
-
-        // ✅ 저장 후 표시 업데이트
-        getClientEventHandler().getMainFrame().getDocumentEditScreen().markSaved();
+    public void setLoginResult(boolean success) {
+        state.setLoggedIn(success);
     }
 
-
-    // 문서 삭제 시 DELETE_DOC 이벤트를 서버에 전송하는 메서드
-    public void deleteDocument(String docName) {
-        CMUserEvent delEvent = new CMUserEvent();
-        delEvent.setStringID("DELETE_DOC");
-        delEvent.setEventField(CMInfo.CM_STR, "name", docName);
-        m_clientStub.send(delEvent, "SERVER");
-        System.out.println("DELETE_DOC event sent for document: " + docName);
-    }
-
-    // Open Document 기능: 현재 문서가 열려 있다면 상태를 리셋한 후 서버에 문서 목록 요청 이벤트를 전송함
-    public void openDocument() {
-        if (isDocOpen()) {
-            setDocOpen(false);
-        }
-        CMUserEvent listDocsEvent = new CMUserEvent();
-        listDocsEvent.setStringID("LIST_DOCS");
-        m_clientStub.send(listDocsEvent, "SERVER");
-        System.out.println("LIST_DOCS 이벤트 전송됨.");
-    }
-
-    public void notifyModified(boolean modified) {
-        if (modified) {
-            getClientEventHandler().getMainFrame().markDocumentModified();
-        } else {
-            getClientEventHandler().getMainFrame().markDocumentSaved();
-        }
+    public void setDocOpen(boolean open) {
+        state.setDocOpen(open);
     }
 
     public static void main(String[] args) {
-        CMClientApp clientApp = new CMClientApp();
-        CMClientStub cmStub = clientApp.getClientStub();
-        cmStub.setAppEventHandler(clientApp.getClientEventHandler());
 
-        // 서버 연결 설정
-        ServerConfig config = ConnectionDialog.getServerConfig();
-        if (config == null) {
-            DialogUtil.showErrorMessage("Server connection settings have been canceled. Exit the program.");
-            System.exit(0);
-        }
-        cmStub.setServerAddress(config.getServerIP());
-        cmStub.setServerPort(config.getPort());
+        /* ---------- 코어 & 서버 접속 ---------- */
+        CMClientApp core = new CMClientApp();
 
-        MainFrame mainFrame = new MainFrame(clientApp);
-        clientApp.getClientEventHandler().setClientUI(mainFrame);
-
-        // 서버 연결 및 로그인 반복 루프
-        while (true) {
-            boolean started = cmStub.startCM();
-            if (!started) {
-                DialogUtil.showErrorMessage("Server connection failed. IP: " + config.getServerIP());
-                System.exit(0);
-            }
-
-            // 서버 응답 기준 로그인 확인을 위해 초기화
-            clientApp.setLoginResult(false);
-
-            LoginDialog loginDialog = new LoginDialog(clientApp);
-            loginDialog.showLoginDialog();  // 여기서 loginCM만 호출되고, 성공 여부는 아래에서 서버 응답으로 판단
-
-            // 서버 응답 기다리기 (최대 3초)
-            int waitMs = 0;
-            while (!clientApp.getLoginResult() && waitMs < 3000) {
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-                waitMs += 100;
-            }
-
-            if (clientApp.getLoginResult()) break;
-
-            // 실패 시 종료 또는 재시도
-            cmStub.terminateCM();
-            boolean retry = DialogUtil.confirm("Login failed. Do you want to try again?", "Retry Login");
-            if (!retry) System.exit(0);
+        // 서버 주소 입력
+        ServerConfig cfg = ConnectionDialog.getServerConfig();
+        if (cfg == null) return;
+        if (!core.connect(cfg.getServerIP(), cfg.getPort())) {
+            DialogUtil.showErrorMessage("Cannot connect to the server.");
+            return;
         }
 
-        // 로그인 성공 시 메인 UI 띄우기
-        new ClientUIController(mainFrame, clientApp);
-        mainFrame.show();
+        /* ---------- 로그인 ---------- */
+        LoginDialog ld = new LoginDialog(core);
+        if (!ld.showLoginDialog()) return;                // 로그인 요청 실패(전송 오류)
+
+        // 서버 응답 대기 – polling (3000 ms 한도)
+        int waited = 0;
+        while (!core.getState().isLoggedIn() && waited < 3000) {
+            try { Thread.sleep(100); } catch (InterruptedException ignored) {}
+            waited += 100;
+        }
+        if (!core.getState().isLoggedIn()) {
+            DialogUtil.showErrorMessage("Login failed (duplicate ID or authentication error)");
+            core.disconnect();
+            return;
+        }
+
+        /* ---------- GUI <-> Core 연결 ---------- */
+        MainFrame ui = new MainFrame(core);          // GUI
+        GuiCallback guiCb = new GuiCallback(core, ui);
+        core.attachCallback(guiCb);                  // 콜백 주입
+
+        new ClientUIController(ui, core);            // 액션 바인딩
+        ui.show();                                   // GUI 표시
     }
-
-
 }
