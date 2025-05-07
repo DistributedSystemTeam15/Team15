@@ -22,7 +22,6 @@ public class CMServerApp {
     }
 
 
-
     public static void main(String[] args) {
         // 서버 애플리케이션 객체 생성 및 서버 시작
         CMServerApp serverApp = new CMServerApp();

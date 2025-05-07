@@ -12,6 +12,6 @@ public class DialogUtil {
         return answer == JOptionPane.YES_OPTION;
     }
     public static void showInfoMessage(String message) {
-        JOptionPane.showMessageDialog(null, message, "알림", JOptionPane.INFORMATION_MESSAGE);
+        JOptionPane.showMessageDialog(null, message, "Notice", JOptionPane.INFORMATION_MESSAGE);
     }
 }
