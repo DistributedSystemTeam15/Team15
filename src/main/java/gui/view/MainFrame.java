@@ -1,4 +1,3 @@
-// ✅ MainFrame.java 수정본 - 문서 제목 및 참여자 표시 (상단 프로필 스타일)
 package gui.view;
 
 import java.awt.*;
