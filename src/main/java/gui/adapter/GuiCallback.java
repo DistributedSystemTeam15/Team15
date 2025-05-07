@@ -112,9 +112,8 @@ public final class GuiCallback implements ClientCallback {
         runEdt(() -> {
             clientCore.setCurrentDocName(name);
             ui.setCurrentDocument(name);
-            ui.getDocumentEditScreen().resetDocumentView();
-            ui.updateTextContent(content);
-            ui.getTextArea().setEditable(true);
+
+            ui.getDocumentEditScreen().updateTextContent(content);
             ui.setSaveEnabled(true);
         });
     }

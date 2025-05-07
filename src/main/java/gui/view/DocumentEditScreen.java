@@ -5,6 +5,7 @@ import java.awt.event.ActionEvent;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.text.BadLocationException;
 import javax.swing.undo.UndoManager;
 
 import cm.CMClientApp;
@@ -65,10 +66,40 @@ public class DocumentEditScreen extends JPanel {
     }
 
     /* ---------------------------------------------------------------- */
-    public void updateTextContent(String content) {
+    public void updateTextContent(String newText) {
         SwingUtilities.invokeLater(() -> {
             ignore = true;
-            textArea.setText(content);
+
+            /* 0) 기존 상태 보관 */
+            String oldText   = textArea.getText();
+            int    caretPos  = textArea.getCaretPosition();
+            int    selStart  = textArea.getSelectionStart();
+            int    selEnd    = textArea.getSelectionEnd();
+
+            /* 1) old ↔ new 첫 번째 차이 지점과 길이 차이 계산 */
+            int diffIdx = 0;
+            int minLen  = Math.min(oldText.length(), newText.length());
+            while (diffIdx < minLen && oldText.charAt(diffIdx) == newText.charAt(diffIdx))
+                diffIdx++;
+
+            // 변경이 caret 앞쪽에서 일어난 경우에만 보정
+            int delta = newText.length() - oldText.length();
+            if (diffIdx <= caretPos)       caretPos += delta;
+            if (diffIdx <= selStart)       selStart += delta;
+            if (diffIdx <= selEnd)         selEnd   += delta;
+
+            /* 2) 텍스트 치환 */
+            textArea.setText(newText);
+
+            /* 3) 보정된 위치로 복원 (경계를 넘어가면 마지막 글자에 맞춤) */
+            int max = newText.length();
+            caretPos = Math.max(0, Math.min(caretPos, max));
+            selStart = Math.max(0, Math.min(selStart, max));
+            selEnd   = Math.max(0, Math.min(selEnd,   max));
+
+            textArea.setCaretPosition(caretPos);
+            textArea.select(selStart, selEnd);
+
             if (!core.isDocOpen()) {
                 textArea.setEditable(true);
                 core.setDocOpen(true);
