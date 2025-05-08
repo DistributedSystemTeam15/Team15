@@ -27,4 +27,11 @@ public interface ClientCallback {
     /* ---------- 문서 삭제 통지 ---------- */
     /** 편집 중인 문서가 서버에서 삭제됐을 때 */
     void onDocumentClosed(String docName);
+
+    /* ---------- 잠금 이벤트 ---------- */
+    /** 잠금 요청 ACK */
+    default void onLockAck(String doc, int start, int end, boolean ok) {}
+
+    /** 잠금/해제 브로드캐스트 */
+    default void onLockUpdate(String doc, int start, int end, String owner) {}
 }
