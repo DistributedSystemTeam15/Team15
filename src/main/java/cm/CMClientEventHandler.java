@@ -16,8 +16,10 @@ import java.util.stream.Collectors;
  * Swing 등 GUI 코드와 전혀 연결되지 않는다.
  */
 public class CMClientEventHandler implements CMAppEventHandler {
-    private volatile ClientCallback callback; // 실질 GUI 콜백
-    private final Set<String> pendingOnline = new HashSet<>(); // 온라인 사용자 캐시
+    private volatile ClientCallback callback;
+
+    /* 온라인 사용자 캐싱 */
+    private final Set<String> pendingOnline = new HashSet<>();
 
     public CMClientEventHandler(ClientCallback cb) {
         this.callback = Objects.requireNonNull(cb);
@@ -36,7 +38,6 @@ public class CMClientEventHandler implements CMAppEventHandler {
     /* ------------ CMAppEventHandler ------------ */
     @Override
     public void processEvent(CMEvent cme) {
-
         switch (cme.getType()) {
 
             /* 1) 세션 이벤트 (로그인 / 로그아웃) */
@@ -54,6 +55,7 @@ public class CMClientEventHandler implements CMAppEventHandler {
     /* ===== 세션 이벤트 ===== */
     private void handleSession(CMSessionEvent se) {
         String user = se.getUserName();
+
         switch (se.getID()) {
             case CMSessionEvent.SESSION_ADD_USER -> {
                 pendingOnline.add(user);
@@ -74,16 +76,8 @@ public class CMClientEventHandler implements CMAppEventHandler {
         switch (id) {
 
             /* 로그인 결과 */
-            case "LOGIN_ACCEPTED" -> {
-                System.out.println("[DEBUG] Received LOGIN_ACCEPTED");
-                callback.onLoginResult(true);
-                System.out.println("[DEBUG] callback.onLoginResult(true) 완료");
-            }
-            case "LOGIN_REJECTED_DUPLICATE" -> {
-                System.out.println("[DEBUG] Received LOGIN_REJECTED_DUPLICATE");
-                callback.onLoginResult(false);
-                System.out.println("[DEBUG] callback.onLoginResult(false) 완료");
-            }
+            case "LOGIN_ACCEPTED" -> callback.onLoginResult(true);
+            case "LOGIN_REJECTED_DUPLICATE" -> callback.onLoginResult(false);
 
             /* 온라인 리스트 일괄 전송 */
             case "ONLINE_LIST" -> {
@@ -102,6 +96,9 @@ public class CMClientEventHandler implements CMAppEventHandler {
 
             /* 문서 내용 */
             case "DOC_CONTENT" -> {
+                System.out.println("[DEBUG] CMClientEventHandler received DOC_CONTENT for " +
+                        ue.getEventField(CMInfo.CM_STR, "name") +
+                        ", length=" + ue.getEventField(CMInfo.CM_STR, "content").length());
                 String name = ue.getEventField(CMInfo.CM_STR, "name");
                 String content = ue.getEventField(CMInfo.CM_STR, "content");
                 callback.onDocumentContentReceived(name, content);
@@ -123,20 +120,25 @@ public class CMClientEventHandler implements CMAppEventHandler {
                 callback.onDocumentClosed(name);
             }
 
-            case "LOCK_ACK" -> {
-                String doc   = ue.getEventField(CMInfo.CM_STR, "doc");
-                int    start = Integer.parseInt(ue.getEventField(CMInfo.CM_INT, "start"));
-                int    end   = Integer.parseInt(ue.getEventField(CMInfo.CM_INT, "end"));
-                boolean ok   = "1".equals(ue.getEventField(CMInfo.CM_INT, "ok"));
-                callback.onLockAck(doc, start, end, ok);
+            case "LOCK_LINE_ACK" -> {
+                String doc   = ue.getEventField(CMInfo.CM_STR,"doc");
+                int sLine    = Integer.parseInt(ue.getEventField(CMInfo.CM_INT,"startLine"));
+                int eLine    = Integer.parseInt(ue.getEventField(CMInfo.CM_INT,"endLine"));
+                boolean ok   = "1".equals(ue.getEventField(CMInfo.CM_INT,"ok"));
+                callback.onLineLockAck(doc,sLine,eLine,ok);
             }
 
-            case "LOCK_NOTIFY" -> {
-                String doc   = ue.getEventField(CMInfo.CM_STR, "doc");
-                int    start = Integer.parseInt(ue.getEventField(CMInfo.CM_INT, "start"));
-                int    end   = Integer.parseInt(ue.getEventField(CMInfo.CM_INT, "end"));
-                String owner = ue.getEventField(CMInfo.CM_STR, "owner");   // "" => 해제
-                callback.onLockUpdate(doc, start, end, owner == null ? "" : owner);
+            case "LOCK_LINE_NOTIFY" -> {
+                String doc   = ue.getEventField(CMInfo.CM_STR,"doc");
+                int sLine    = Integer.parseInt(ue.getEventField(CMInfo.CM_INT,"startLine"));
+                int eLine    = Integer.parseInt(ue.getEventField(CMInfo.CM_INT,"endLine"));
+                String owner = ue.getEventField(CMInfo.CM_STR,"owner");    // "" → 해제
+                callback.onLineLockUpdate(doc,sLine,eLine,owner==null?"":owner);
+            }
+
+            case "EDIT_REJECT" -> {
+                String rsn = ue.getEventField(CMInfo.CM_STR,"reason");
+                callback.onEditReject(rsn==null?"":rsn);
             }
 
             default -> { /* 알 수 없는 이벤트 무시 */ }

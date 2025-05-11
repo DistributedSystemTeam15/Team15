@@ -21,14 +21,16 @@ import java.util.Set;
  */
 public final class GuiCallback implements ClientCallback {
     private final CMClientApp clientCore;   // 상태 업데이트용
-    private final MainFrame ui;             // 실제 화면
+    private final MainFrame ui;           // 실제 화면
 
     public GuiCallback(CMClientApp core, MainFrame ui) {
         this.clientCore = Objects.requireNonNull(core);
         this.ui = Objects.requireNonNull(ui);
     }
 
-    /* 1) 로그인 결과 */
+    /* ------------------------------------------------------------------
+       1) 로그인 결과
+       ------------------------------------------------------------------ */
     @Override
     public void onLoginResult(boolean success) {
         clientCore.setLoginResult(success);
@@ -37,12 +39,21 @@ public final class GuiCallback implements ClientCallback {
         if (!success) {
             runEdt(() -> {
                 DialogUtil.showErrorMessage("Login failed. Please try again.");
-                if (!new LoginDialog(clientCore).showLoginDialog()) System.exit(0);
+
+                /* ① 서버 연결 해제 */
+                clientCore.disconnect();
+                /* ② 새로운 로그인 다이얼로그 호출 (비동기로 재시도) */
+                LoginDialog dlg = new LoginDialog(clientCore);
+                boolean requested = dlg.showLoginDialog();
+                /* 사용자가 취소하면 애플리케이션 종료 */
+                if (!requested) System.exit(0);
             });
         }
     }
 
-    /* 2) 온라인 사용자 / 문서 사용자 */
+    /* ------------------------------------------------------------------
+       2) 온라인 사용자 / 문서 사용자
+       ------------------------------------------------------------------ */
     @Override
     public void onOnlineUsersUpdated(Set<String> users) {
         runEdt(() -> ui.setOnlineUsers(users));
@@ -57,7 +68,9 @@ public final class GuiCallback implements ClientCallback {
         });
     }
 
-    /* 3) 문서 메타 리스트 */
+    /* ------------------------------------------------------------------
+       3) 문서 메타 리스트
+       ------------------------------------------------------------------ */
     @Override
     public void onDocumentListReceived(String json) {
         runEdt(() -> {
@@ -91,25 +104,29 @@ public final class GuiCallback implements ClientCallback {
         });
     }
 
-    /* 4) 문서 내용 */
+    /* ------------------------------------------------------------------
+       4) 문서 내용
+       ------------------------------------------------------------------ */
     @Override
     public void onDocumentContentReceived(String name, String content) {
         runEdt(() -> {
+            System.out.println("[DEBUG] GuiCallback.onDocumentContentReceived: " + name +
+                    "  (length=" + content.length() + ")");
+
             clientCore.setCurrentDocName(name);
             ui.setCurrentDocument(name);
+
             ui.getDocumentEditScreen().updateTextContent(content);
             ui.setSaveEnabled(true);
         });
     }
 
-    /* 5) 문서 삭제 알림 */
+    /* ------------------------------------------------------------------
+       5) 문서 삭제 알림
+       ------------------------------------------------------------------ */
     @Override
     public void onDocumentClosed(String name) {
         runEdt(() -> {
-            // 문서 닫힐 때 잠금 UI 및 상태 초기화
-            ui.getDocumentEditScreen().clearAllLocks();
-            clientCore.setDocOpen(false);
-
             if (name.equals(clientCore.getCurrentDocName())) {
                 clientCore.setCurrentDocName(null);
                 ui.showWelcomeScreen();
@@ -123,15 +140,17 @@ public final class GuiCallback implements ClientCallback {
         });
     }
 
-    /* 잠금 프로토콜 */
     @Override
-    public void onLockAck(String doc, int start, int end, boolean ok) {
-        runEdt(() -> ui.getDocumentEditScreen().handleLockAck(start, end, ok));
+    public void onLineLockAck(String doc,int s,int e,boolean ok) {
+        runEdt(() -> ui.getDocumentEditScreen().handleLineLockAck(s,e,ok));
     }
-
     @Override
-    public void onLockUpdate(String doc, int start, int end, String owner) {
-        runEdt(() -> ui.getDocumentEditScreen().handleLockNotify(start, end, owner));
+    public void onLineLockUpdate(String doc,int s,int e,String owner) {
+        runEdt(() -> ui.getDocumentEditScreen().handleLineLockNotify(s,e,owner));
+    }
+    @Override
+    public void onEditReject(String reason) {
+        runEdt(() -> DialogUtil.showErrorMessage("Edit rejected: "+reason));
     }
 
     /* ========== EDT 헬퍼 ========== */

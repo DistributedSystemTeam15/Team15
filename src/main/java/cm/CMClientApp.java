@@ -1,7 +1,6 @@
 package cm;
 
 import cm.core.ClientCallback;
-import cm.lock.Interval;
 import cm.model.ClientState;
 
 import gui.adapter.GuiCallback;
@@ -15,8 +14,6 @@ import kr.ac.konkuk.ccslab.cm.event.CMUserEvent;
 import kr.ac.konkuk.ccslab.cm.info.CMInfo;
 import kr.ac.konkuk.ccslab.cm.stub.CMClientStub;
 
-import java.io.IOException;
-import java.nio.channels.UnresolvedAddressException;
 import java.util.List;
 import java.util.Set;
 
@@ -39,67 +36,40 @@ public class CMClientApp {
     public CMClientApp() {
         /* 임시 콜백 (로그인 결과만 반영하면 충분) */
         ClientCallback temp = new ClientCallback() {
-            @Override
-            public void onLoginResult(boolean ok) {
+            @Override public void onLoginResult(boolean ok) {
                 state.setLoggedIn(ok);          // ★ 로그인 상태 저장
             }
-
-            @Override
-            public void onOnlineUsersUpdated(Set<String> u) {
-            }
-
-            @Override
-            public void onDocumentListReceived(String j) {
-            }
-
-            @Override
-            public void onDocumentContentReceived(String d, String c) {
-            }
-
-            @Override
-            public void onDocumentClosed(String d) {
-            }
-
-            @Override
-            public void onDocumentUserList(String doc, List<String> users) {
-            }
+            @Override public void onOnlineUsersUpdated(Set<String> u) {}
+            @Override public void onDocumentListReceived(String j) {}
+            @Override public void onDocumentContentReceived(String d, String c) {}
+            @Override public void onDocumentClosed(String d) {}
+            @Override public void onDocumentUserList(String doc, List<String> users) {}
         };
 
         /* 실제 Stub/Handler 한 번만 생성 */
-        this.stub = new CMClientStub();
+        this.stub    = new CMClientStub();
         this.handler = new CMClientEventHandler(temp);
         stub.setAppEventHandler(handler);
     }
 
-    /* Internal helper */
-    private void send(String id, String key, String val) {
-        CMUserEvent ev = new CMUserEvent();
-        ev.setStringID(id);
-        if (key != null && val != null) ev.setEventField(CMInfo.CM_STR, key, val);
-        stub.send(ev, "SERVER");
-    }
+    /* 로그인 후 GUI를 만든 뒤 호출해서 콜백을 주입 */
+    public void attachCallback(ClientCallback guiCb) {
+        /* ▶ 핸들러 교체 대신 콜백만 바꾼다 */
+        handler.setCallback(guiCb);
 
-    /* callback hookup */
-    public void attachCallback(ClientCallback cb) {
-        handler.setCallback(cb);
-        cb.onOnlineUsersUpdated(handler.getOnlineUsers());
+        /* ▶ 이미 받은 온라인 사용자 목록을 GUI 에 즉시 전달 */
+        guiCb.onOnlineUsersUpdated(handler.getOnlineUsers());
+
+        /* ▶ 문서 목록도 다시 받아 오면 UI 초기화 완벽 */
         requestDocumentList();
     }
 
-    /* life-cycle */
+    /* ---------- Connection ---------- */
     public boolean connect(String serverIp, int port) {
         stub.setServerAddress(serverIp);
         stub.setServerPort(port);
-        try {
-            return stub.startCM();                 // 내부 FutureTask 실행
-        } catch (UnresolvedAddressException ex) {
-            DialogUtil.showErrorMessage(
-                    "Cannot resolve or reach the server address: " + serverIp + ":" + port);
-            return false;
-        } catch (Exception ex) {                   // 기타 예외
-            DialogUtil.showErrorMessage("Failed to start CM: " + ex.getMessage());
-            return false;
-        }
+        boolean ok = stub.startCM();
+        return ok;
     }
 
     public void disconnect() {
@@ -107,10 +77,10 @@ public class CMClientApp {
         state.setLoggedIn(false);
     }
 
-    /* Login */
-    public void loginAsync(String id, String pw) {
+    /* ---------- Login ---------- */
+    public void loginAsync(String userId, String password) {
         state.setLoggedIn(false);
-        stub.loginCM(id, pw);     // 결과는 이벤트 → callback.onLoginResult
+        stub.loginCM(userId, password);     // 결과는 이벤트 → callback.onLoginResult
     }
 
     /* ---------- Business API ---------- */
@@ -124,40 +94,42 @@ public class CMClientApp {
         state.setCurrentDoc(name);
     }
 
-    public void editCurrentDocument(String txt) {
-        send("EDIT_DOC", "content", txt);
+    public void editCurrentDocument(String newContent) {
+        System.out.println("[DEBUG] Sending EDIT_DOC to server; newContent length=" + newContent.length());
+        sendUserEvent("EDIT_DOC", "content", newContent);
     }
 
     public void saveCurrentDocument() {
-        send("SAVE_DOC", null, null);
+        sendUserEvent("SAVE_DOC", null, null);
     }
 
     public void deleteDocument(String name) {
-        send("DELETE_DOC", "name", name);
+        sendUserEvent("DELETE_DOC", "name", name);
     }
 
     public void requestDocumentList() {
-        send("LIST_DOCS", null, null);
+        sendUserEvent("LIST_DOCS", null, null);
     }
-
-    /* interval-lock 요청 / 해제 */
-    public void requestIntervalLock(int start, int end) {
-        Interval iv = new Interval(start, end);
+    /* ---------- Line-Lock API ---------- */
+    /** 현재 열린 문서에서 startLine~endLine(포함) 잠금 요청 */
+    public void requestLineLock(int startLine, int endLine) {
+        if (state.getCurrentDoc() == null) return;          // 문서 안 열렸을 때 방어
         CMUserEvent ev = new CMUserEvent();
-        ev.setStringID("LOCK_REQ");
+        ev.setStringID("LOCK_LINE_REQ");
         ev.setEventField(CMInfo.CM_STR, "doc", state.getCurrentDoc());
-        ev.setEventField(CMInfo.CM_INT, "start", "" + iv.start());
-        ev.setEventField(CMInfo.CM_INT, "end", "" + iv.end());
+        ev.setEventField(CMInfo.CM_INT, "startLine", "" + startLine);
+        ev.setEventField(CMInfo.CM_INT, "endLine",   "" + endLine);
         stub.send(ev, "SERVER");
     }
 
-    public void releaseIntervalLock(int start, int end) {
-        Interval iv = new Interval(start, end);
+    /** startLine~endLine 범위의 잠금을 해제 */
+    public void releaseLineLock(int startLine, int endLine) {
+        if (state.getCurrentDoc() == null) return;
         CMUserEvent ev = new CMUserEvent();
-        ev.setStringID("LOCK_RELEASE");
+        ev.setStringID("LOCK_LINE_RELEASE");
         ev.setEventField(CMInfo.CM_STR, "doc", state.getCurrentDoc());
-        ev.setEventField(CMInfo.CM_INT, "start", "" + iv.start());
-        ev.setEventField(CMInfo.CM_INT, "end", "" + iv.end());
+        ev.setEventField(CMInfo.CM_INT, "startLine", "" + startLine);
+        ev.setEventField(CMInfo.CM_INT, "endLine",   "" + endLine);
         stub.send(ev, "SERVER");
     }
 
@@ -207,21 +179,19 @@ public class CMClientApp {
 
         // 서버 주소 입력
         ServerConfig cfg = ConnectionDialog.getServerConfig();
-        if (cfg == null || !core.connect(cfg.getServerIP(), cfg.getPort())) {
-            DialogUtil.showErrorMessage("Cannot connect to server.");
+        if (cfg == null) return;
+        if (!core.connect(cfg.getServerIP(), cfg.getPort())) {
+            DialogUtil.showErrorMessage("Cannot connect to the server.");
             return;
         }
-
         /* ---------- 로그인 ---------- */
-        if (!new LoginDialog(core).showLoginDialog()) return;
+        LoginDialog ld = new LoginDialog(core);
+        if (!ld.showLoginDialog()) return;                // 로그인 요청 실패(전송 오류)
 
         // 서버 응답 대기 – polling (3000 ms 한도)
         int waited = 0;
         while (!core.getState().isLoggedIn() && waited < 3000) {
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException ignored) {
-            }
+            try { Thread.sleep(100); } catch (InterruptedException ignored) {}
             waited += 100;
         }
         if (!core.getState().isLoggedIn()) {
@@ -231,9 +201,11 @@ public class CMClientApp {
         }
 
         /* ---------- GUI <-> Core 연결 ---------- */
-        MainFrame ui = new MainFrame(core);             // GUI
-        core.attachCallback(new GuiCallback(core, ui)); // 콜백 주입
-        new ClientUIController(ui, core);               // 액션 바인딩
-        ui.show();                                      // GUI 표시
+        MainFrame ui = new MainFrame(core);          // GUI
+        GuiCallback guiCb = new GuiCallback(core, ui);
+        core.attachCallback(guiCb);                  // 콜백 주입
+
+        new ClientUIController(ui, core);            // 액션 바인딩
+        ui.show();                                   // GUI 표시
     }
 }

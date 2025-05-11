@@ -28,10 +28,8 @@ public interface ClientCallback {
     /** 편집 중인 문서가 서버에서 삭제됐을 때 */
     void onDocumentClosed(String docName);
 
-    /* ---------- 잠금 이벤트 ---------- */
-    /** 잠금 요청 ACK */
-    default void onLockAck(String doc, int start, int end, boolean ok) {}
-
-    /** 잠금/해제 브로드캐스트 */
-    default void onLockUpdate(String doc, int start, int end, String owner) {}
+    /* ---------- 라인 락 ---------- */
+    default void onLineLockAck(String doc,int startLine,int endLine,boolean ok) {}
+    default void onLineLockUpdate(String doc,int startLine,int endLine,String owner) {}
+    default void onEditReject(String reason) {}
 }
