@@ -21,55 +21,143 @@ public class DocumentEditScreen extends JPanel {
     private final JTextArea textArea = new JTextArea(25, 50);
     private final UndoManager undo = new UndoManager();
 
-    private final Map<Integer,Object> foreignLines = new HashMap<>();
+    private final Map<Integer,Object> myLineTags      = new HashMap<>();
+    private final Map<Integer,Object> foreignLineTags = new HashMap<>();
     private final Set<Integer> myLines = new HashSet<>();
+    private final Set<Integer> lockedLines = new HashSet<>();
+
     private static final Highlighter.HighlightPainter PAINT_MY =
             new DefaultHighlighter.DefaultHighlightPainter(new Color(0,180,0,80));
     private static final Highlighter.HighlightPainter PAINT_FOREIGN =
             new DefaultHighlighter.DefaultHighlightPainter(new Color(200,0,0,60));
 
+    // 마지막으로 요청했던 락 범위
+    private int lastStart = -1, lastEnd = -1;
+
     /* selection 변경 → 라인 계산 */
     private void handleSelectionChange() {
+        if (ignore) return;
+
+        // 1) 원시 선택 오프셋
+        int rawStart = textArea.getSelectionStart();
+        int rawEnd   = textArea.getSelectionEnd();
+
+        // 2) sLine 계산 (예외 시 0으로)
+        int sLine;
         try {
-            int sLine = textArea.getLineOfOffset(textArea.getSelectionStart());
-            int rawEnd = textArea.getSelectionEnd();
-            int eLine  = textArea.getLineOfOffset(rawEnd > 0 ? rawEnd - 1 : 0);
-            if (sLine==eLine && myLines.contains(sLine)) return; // 그대로
-            /* release 기존 */
-            if (!myLines.isEmpty())
-                core.releaseLineLock(Collections.min(myLines), Collections.max(myLines));
-            core.requestLineLock(sLine,eLine);
-        } catch (BadLocationException ignored) {}
+            sLine = textArea.getLineOfOffset(rawStart);
+        } catch (BadLocationException ex) {
+            sLine = 0;
+        }
+
+        // 3) eLine 계산 (끝 offset -1 → 예외 시 sLine로)
+        int endPos = rawEnd > 0 ? rawEnd - 1 : 0;
+        int eLine;
+        try {
+            eLine = textArea.getLineOfOffset(endPos);
+        } catch (BadLocationException ex) {
+            eLine = sLine;
+        }
+
+        // 4) 라인 번호를 [0, 마지막라인] 범위로 클램핑
+        int maxLine = textArea.getLineCount() - 1;
+        sLine = Math.max(0, Math.min(sLine, maxLine));
+        eLine = Math.max(0, Math.min(eLine, maxLine));
+        if (eLine < sLine) eLine = sLine;
+
+        // 5) 지난번과 같으면 무시
+        if (sLine == lastStart && eLine == lastEnd) {
+            return;
+        }
+
+        // 6) 이미 잠금된 타인 라인 체크
+        for (int ln = sLine; ln <= eLine; ln++) {
+            if (lockedLines.contains(ln) && !myLines.contains(ln)) {
+                Toolkit.getDefaultToolkit().beep();
+                return;
+            }
+        }
+
+        // 7) 기존 내 락 해제
+        if (!myLines.isEmpty()) {
+            int relStart = Collections.min(myLines);
+            int relEnd   = Collections.max(myLines);
+            core.releaseLineLock(relStart, relEnd);
+        }
+
+        // 8) 새 라인 락 요청
+        core.requestLineLock(sLine, eLine);
+
+        // 9) 요청 범위 기록
+        lastStart = sLine;
+        lastEnd   = eLine;
     }
 
     /* ----- 서버 ACK 수신 ----- */
     public void handleLineLockAck(int s,int e,boolean ok){
-        if(!ok){ Toolkit.getDefaultToolkit().beep(); return; }
-        clearMyLines(false);
-        for(int ln=s; ln<=e; ln++){
-            try{
-                int lo=textArea.getLineStartOffset(ln);
-                int hi=textArea.getLineEndOffset(ln);
-                Object tag=textArea.getHighlighter().addHighlight(lo,hi,PAINT_MY);
-                foreignLines.put(ln,tag);   // 같은 맵 재사용
-                myLines.add(ln);
-            }catch(BadLocationException ignored){}
+        // stale ACK 방지: 마지막 요청 범위와 다르면,
+        // 서버에 쌓인 “out-of-order” 락을 즉시 해제하고 리턴
+        if (s != lastStart || e != lastEnd) {
+            if (ok) core.releaseLineLock(s, e);
+            return;
         }
+
+        if(!ok){ Toolkit.getDefaultToolkit().beep(); return; }
+
+        Highlighter hl = textArea.getHighlighter();
+        Set<Integer> previous = new HashSet<>(myLines);
+
+        // 기존 녹색 태그 모두 제거
+        for (int ln : previous) {
+            Object oldTag = myLineTags.remove(ln);
+            if (oldTag != null) hl.removeHighlight(oldTag);
+            lockedLines.remove(ln);
+        }
+        myLines.clear();
+
+        // 새로운 녹색 태그 추가
+        for (int ln = s; ln <= e; ln++) {
+            try {
+                int lo = textArea.getLineStartOffset(ln);
+                int hi = textArea.getLineEndOffset(ln);
+                Object tag = hl.addHighlight(lo, hi, PAINT_MY);
+                myLineTags.put(ln, tag);
+                myLines.add(ln);
+                lockedLines.add(ln);
+            } catch (BadLocationException ignored) {}
+        }
+        // ack 성공 기준으로 lastStart/lastEnd 확정
+        lastStart = s;
+        lastEnd   = e;
+
         restartIdleTimer();
     }
 
     /* ----- NOTIFY 수신 ----- */
     public void handleLineLockNotify(int s,int e,String owner){
         SwingUtilities.invokeLater(() -> {
+            Highlighter hl = textArea.getHighlighter();
             for(int ln=s; ln<=e; ln++){
-                if(owner.isEmpty()){                // 해제
-                    removeLineHighlight(ln);
+                if(owner.isEmpty()){
+                    // (1) 빨간 태그 제거
+                    Object redTag = foreignLineTags.remove(ln);
+                    if(redTag != null) hl.removeHighlight(redTag);
+                    // (2) 초록 태그 제거
+                    Object greenTag = myLineTags.remove(ln);
+                    if(greenTag != null) hl.removeHighlight(greenTag);
+                    // (3) 집합에서도 제거
+                    myLines.remove(ln);
+                    lockedLines.remove(ln);
                 }else if(!owner.equals(core.getStub().getMyself().getName())){
+                    // 갱신 전, 기존 빨간 태그 제거
+                    Object oldTag = foreignLineTags.remove(ln);
+                    if (oldTag != null) hl.removeHighlight(oldTag);
                     try{
                         int lo=textArea.getLineStartOffset(ln);
                         int hi=textArea.getLineEndOffset(ln);
                         Object tag=textArea.getHighlighter().addHighlight(lo,hi,PAINT_FOREIGN);
-                        replaceHighlight(ln,tag);
+                        foreignLineTags.put(ln, tag);
+                        lockedLines.add(ln);
                     }catch(BadLocationException ignored){}
                 }
             }
@@ -90,9 +178,9 @@ public class DocumentEditScreen extends JPanel {
 
     private void buildUI() {
         setLayout(new BorderLayout());
-        textArea.getDocument().addUndoableEditListener(e -> undo.addEdit(e.getEdit()));
 
         /* Ctrl + Z */
+        textArea.getDocument().addUndoableEditListener(e -> undo.addEdit(e.getEdit()));
         textArea.getInputMap().put(KeyStroke.getKeyStroke("control Z"), "undo");
         textArea.getActionMap().put("undo", new AbstractAction() {
             @Override
@@ -149,6 +237,7 @@ public class DocumentEditScreen extends JPanel {
     public void updateTextContent(String newText) {
         SwingUtilities.invokeLater(() -> {
             ignore = true;
+//            clearAllLocks();
 
             /* 0) 기존 상태 보관 */
             String oldText   = textArea.getText();
@@ -177,26 +266,25 @@ public class DocumentEditScreen extends JPanel {
             Highlighter hl = textArea.getHighlighter();
             hl.removeAllHighlights();
 
-            // 내 라인 락(초록) 재적용
-            for (int ln : myLines) {
+            // 녹색 락 재적용
+            for (var entry : myLineTags.entrySet()) {
+                int ln = entry.getKey();
                 try {
                     int lo = textArea.getLineStartOffset(ln);
                     int hi = textArea.getLineEndOffset(ln);
-                    Object tag = hl.addHighlight(lo, hi, PAINT_MY);
-                    // replace the old tag so clearMyLines / removeLineHighlight still works
-                    foreignLines.put(ln, tag);
+                    Object newTag = hl.addHighlight(lo, hi, PAINT_MY);
+                    entry.setValue(newTag);
                 } catch (BadLocationException ignored) {}
             }
 
-            // 타인 라인 락(빨강) 재적용
-            // note: foreignLines.keySet() still holds all previously‐locked lines
-            for (int ln : new ArrayList<>(foreignLines.keySet())) {
-                if (myLines.contains(ln)) continue;
+            // 빨간 락 재적용
+            for (var entry : foreignLineTags.entrySet()) {
+                int ln = entry.getKey();
                 try {
                     int lo = textArea.getLineStartOffset(ln);
                     int hi = textArea.getLineEndOffset(ln);
-                    Object tag = hl.addHighlight(lo, hi, PAINT_FOREIGN);
-                    foreignLines.put(ln, tag);
+                    Object newTag = hl.addHighlight(lo, hi, PAINT_FOREIGN);
+                    entry.setValue(newTag);
                 } catch (BadLocationException ignored) {}
             }
 
@@ -217,6 +305,26 @@ public class DocumentEditScreen extends JPanel {
         });
     }
 
+    public void clearAllLocks() {
+        Highlighter hl = textArea.getHighlighter();
+        // 1) 녹색(내 락) 태그 전부 제거
+        for (Object tag : myLineTags.values()) {
+            hl.removeHighlight(tag);
+        }
+        myLineTags.clear();
+        myLines.clear();
+
+        // 2) 빨간색(타인 락) 태그 전부 제거
+        for (Object tag : foreignLineTags.values()) {
+            hl.removeHighlight(tag);
+        }
+        foreignLineTags.clear();
+
+        // 3) lockedLines, lastStart/lastEnd 초기화
+        lockedLines.clear();
+        lastStart = lastEnd = -1;
+    }
+
     public void resetDocumentView() {
         resetDocumentView(false);
     }
@@ -224,27 +332,19 @@ public class DocumentEditScreen extends JPanel {
     public void resetDocumentView(boolean editable) {
         SwingUtilities.invokeLater(() -> {
             ignore = true;
+
             textArea.setText("");
             textArea.setEditable(editable);
             core.setDocOpen(editable);
+
+            // 잠금 상태 초기화
+            myLineTags.clear();
+            foreignLineTags.clear();
+            myLines.clear();
+            lockedLines.clear();
+
             ignore = false;
         });
-    }
-
-    /* 유틸 */
-    private void replaceHighlight(int ln,Object tag){
-        Object old=foreignLines.put(ln,tag);
-        if(old!=null) textArea.getHighlighter().removeHighlight(old);
-    }
-    private void removeLineHighlight(int ln){
-        Object tag=foreignLines.remove(ln);
-        if(tag!=null) textArea.getHighlighter().removeHighlight(tag);
-        myLines.remove(ln);
-    }
-    private void clearMyLines(boolean repaint){
-        for(int ln:myLines) removeLineHighlight(ln);
-        myLines.clear();
-        if(repaint) textArea.repaint();
     }
 
     /* 5 초 idle-timer (필드) */

@@ -116,6 +116,7 @@ public final class GuiCallback implements ClientCallback {
             clientCore.setCurrentDocName(name);
             ui.setCurrentDocument(name);
 
+            ui.getDocumentEditScreen().clearAllLocks();
             ui.getDocumentEditScreen().updateTextContent(content);
             ui.setSaveEnabled(true);
         });
@@ -129,6 +130,7 @@ public final class GuiCallback implements ClientCallback {
         runEdt(() -> {
             if (name.equals(clientCore.getCurrentDocName())) {
                 clientCore.setCurrentDocName(null);
+                clientCore.setDocOpen(false);
                 ui.showWelcomeScreen();
                 ui.setSaveEnabled(false);
                 DialogUtil.showInfoMessage(
