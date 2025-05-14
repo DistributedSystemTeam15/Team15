@@ -27,4 +27,9 @@ public interface ClientCallback {
     /* ---------- 문서 삭제 통지 ---------- */
     /** 편집 중인 문서가 서버에서 삭제됐을 때 */
     void onDocumentClosed(String docName);
+
+    /* ---------- 라인 락 ---------- */
+    default void onLineLockAck(String doc,int startLine,int endLine,boolean ok) {}
+    default void onLineLockUpdate(String doc,int startLine,int endLine,String owner) {}
+    default void onEditReject(String reason) {}
 }

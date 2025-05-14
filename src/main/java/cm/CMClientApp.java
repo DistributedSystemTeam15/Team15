@@ -68,7 +68,8 @@ public class CMClientApp {
     public boolean connect(String serverIp, int port) {
         stub.setServerAddress(serverIp);
         stub.setServerPort(port);
-        return stub.startCM();
+        boolean ok = stub.startCM();
+        return ok;
     }
 
     public void disconnect() {
@@ -94,6 +95,7 @@ public class CMClientApp {
     }
 
     public void editCurrentDocument(String newContent) {
+        System.out.println("[DEBUG] Sending EDIT_DOC to server; newContent length=" + newContent.length());
         sendUserEvent("EDIT_DOC", "content", newContent);
     }
 
@@ -107,6 +109,28 @@ public class CMClientApp {
 
     public void requestDocumentList() {
         sendUserEvent("LIST_DOCS", null, null);
+    }
+    /* ---------- Line-Lock API ---------- */
+    /** 현재 열린 문서에서 startLine~endLine(포함) 잠금 요청 */
+    public void requestLineLock(int startLine, int endLine) {
+        if (state.getCurrentDoc() == null) return;          // 문서 안 열렸을 때 방어
+        CMUserEvent ev = new CMUserEvent();
+        ev.setStringID("LOCK_LINE_REQ");
+        ev.setEventField(CMInfo.CM_STR, "doc", state.getCurrentDoc());
+        ev.setEventField(CMInfo.CM_INT, "startLine", "" + startLine);
+        ev.setEventField(CMInfo.CM_INT, "endLine",   "" + endLine);
+        stub.send(ev, "SERVER");
+    }
+
+    /** startLine~endLine 범위의 잠금을 해제 */
+    public void releaseLineLock(int startLine, int endLine) {
+        if (state.getCurrentDoc() == null) return;
+        CMUserEvent ev = new CMUserEvent();
+        ev.setStringID("LOCK_LINE_RELEASE");
+        ev.setEventField(CMInfo.CM_STR, "doc", state.getCurrentDoc());
+        ev.setEventField(CMInfo.CM_INT, "startLine", "" + startLine);
+        ev.setEventField(CMInfo.CM_INT, "endLine",   "" + endLine);
+        stub.send(ev, "SERVER");
     }
 
     /* ---------- Helper ---------- */
@@ -160,7 +184,6 @@ public class CMClientApp {
             DialogUtil.showErrorMessage("Cannot connect to the server.");
             return;
         }
-
         /* ---------- 로그인 ---------- */
         LoginDialog ld = new LoginDialog(core);
         if (!ld.showLoginDialog()) return;                // 로그인 요청 실패(전송 오류)
