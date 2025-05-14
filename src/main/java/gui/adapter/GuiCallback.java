@@ -110,9 +110,13 @@ public final class GuiCallback implements ClientCallback {
     @Override
     public void onDocumentContentReceived(String name, String content) {
         runEdt(() -> {
+            System.out.println("[DEBUG] GuiCallback.onDocumentContentReceived: " + name +
+                    "  (length=" + content.length() + ")");
+
             clientCore.setCurrentDocName(name);
             ui.setCurrentDocument(name);
 
+            ui.getDocumentEditScreen().clearAllLocks();
             ui.getDocumentEditScreen().updateTextContent(content);
             ui.setSaveEnabled(true);
         });
@@ -126,6 +130,7 @@ public final class GuiCallback implements ClientCallback {
         runEdt(() -> {
             if (name.equals(clientCore.getCurrentDocName())) {
                 clientCore.setCurrentDocName(null);
+                clientCore.setDocOpen(false);
                 ui.showWelcomeScreen();
                 ui.setSaveEnabled(false);
                 DialogUtil.showInfoMessage(
@@ -135,6 +140,19 @@ public final class GuiCallback implements ClientCallback {
                         "Document \"" + name + "\" has been deleted.");
             }
         });
+    }
+
+    @Override
+    public void onLineLockAck(String doc,int s,int e,boolean ok) {
+        runEdt(() -> ui.getDocumentEditScreen().handleLineLockAck(s,e,ok));
+    }
+    @Override
+    public void onLineLockUpdate(String doc,int s,int e,String owner) {
+        runEdt(() -> ui.getDocumentEditScreen().handleLineLockNotify(s,e,owner));
+    }
+    @Override
+    public void onEditReject(String reason) {
+        runEdt(() -> DialogUtil.showErrorMessage("Edit rejected: "+reason));
     }
 
     /* ========== EDT 헬퍼 ========== */

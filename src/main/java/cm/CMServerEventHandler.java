@@ -20,12 +20,16 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.Date;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 public class CMServerEventHandler implements CMAppEventHandler {
     private CMServerStub m_serverStub;                       // 서버 스텁 객체 (클라이언트와 통신)
     private Map<String, String> documents;                   // in-memory에서 문서 내용 관리 (문서명 -> 문서 내용)
     private Map<String, Set<String>> docUsers;
+
+    // 문서명 → <줄번호, ownerID> 매핑
+    private final Map<String, Map<Integer,String>> lineLocks = new ConcurrentHashMap<>();
 
     private static class MetaInfo {
         String creatorId;
@@ -297,6 +301,9 @@ public class CMServerEventHandler implements CMAppEventHandler {
 
                 // 문서 편집 이벤트 처리
                 case "EDIT_DOC": {
+                    System.out.println("[DEBUG] Server received EDIT_DOC from " + user +
+                            " for doc=" + userCurrentDoc.get(user) +
+                            ", content length=" + ue.getEventField(CMInfo.CM_STR,"content").length());
                     String newContent = ue.getEventField(CMInfo.CM_STR, "content");
                     String docName = userCurrentDoc.get(user);
                     if (docName == null) {
@@ -304,8 +311,19 @@ public class CMServerEventHandler implements CMAppEventHandler {
                         break;
                     }
 
+                    // 아직 제대로 된 줄 단위 잠금이 구현되지 않아 우선 주석 처리
+//                    if (!ownsAllLines(docName, newContent, user)) {
+//                        CMUserEvent rej = new CMUserEvent();
+//                        rej.setStringID("EDIT_REJECT");
+//                        rej.setEventField(CMInfo.CM_STR,"reason","no_lock");
+//                        m_serverStub.send(rej, user);
+//                        break;
+//                    }
+
                     // in-memory에 문서 내용을 업데이트
                     documents.put(docName, newContent);
+                    System.out.println("[DEBUG] Server memory updated for doc=" + docName +
+                            ", now length=" + documents.get(docName).length());
                     MetaInfo metaEdit = docMeta.get(docName);
                     if (metaEdit != null) {
                         metaEdit.lastEditorId = user;
@@ -373,7 +391,6 @@ public class CMServerEventHandler implements CMAppEventHandler {
                     break;
                 }
 
-
                 // 삭제 가능한 문서 목록 조회 이벤트 처리: in-memory의 문서 목록 전달
                 case "LIST_DOCS_FOR_DELETE": {
                     StringBuilder sb = new StringBuilder();
@@ -425,6 +442,34 @@ public class CMServerEventHandler implements CMAppEventHandler {
                     break;
                 }
 
+                case "LOCK_LINE_REQ": {                      // ★ 신규
+                    String doc = ue.getEventField(CMInfo.CM_STR,"doc");
+                    int sLine  = Integer.parseInt(ue.getEventField(CMInfo.CM_INT,"startLine"));
+                    int eLine  = Integer.parseInt(ue.getEventField(CMInfo.CM_INT,"endLine"));
+
+                    boolean ok = tryLineLock(doc, sLine, eLine, user);
+
+                    CMUserEvent ack = new CMUserEvent();
+                    ack.setStringID("LOCK_LINE_ACK");
+                    ack.setEventField(CMInfo.CM_STR,"doc", doc);
+                    ack.setEventField(CMInfo.CM_INT,"startLine",""+sLine);
+                    ack.setEventField(CMInfo.CM_INT,"endLine",""+eLine);
+                    ack.setEventField(CMInfo.CM_INT,"ok", ok ? "1":"0");
+                    m_serverStub.send(ack, user);
+
+                    if (ok) broadcastLineNotify(doc, sLine, eLine, user);  // owner=user
+                    break;
+                }
+
+                case "LOCK_LINE_RELEASE": {
+                    String doc = ue.getEventField(CMInfo.CM_STR,"doc");
+                    int sLine  = Integer.parseInt(ue.getEventField(CMInfo.CM_INT,"startLine"));
+                    int eLine  = Integer.parseInt(ue.getEventField(CMInfo.CM_INT,"endLine"));
+                    releaseLineLock(doc, sLine, eLine, user);
+                    broadcastLineNotify(doc, sLine, eLine, "");            // owner=""
+                    break;
+                }
+
                 default: {
                     System.out.println("알 수 없는 이벤트 타입: " + eventID);
                     break;
@@ -440,6 +485,8 @@ public class CMServerEventHandler implements CMAppEventHandler {
      * @param docName    문서 이름
      */
     private void sendTextUpdateToClient(String targetUser, String docName) {
+        System.out.println("[DEBUG] Broadcasting DOC_CONTENT to " + targetUser +
+                " for doc=" + docName + ", length=" + (documents.get(docName)==null?0:documents.get(docName).length()));
         String content = documents.get(docName);
         if (content == null) content = "";
         CMUserEvent updateEvent = new CMUserEvent();
@@ -491,4 +538,42 @@ public class CMServerEventHandler implements CMAppEventHandler {
         }
     }
 
+    private boolean tryLineLock(String doc,int s,int e,String user){
+        Map<Integer,String> map = lineLocks
+                .computeIfAbsent(doc,d->new ConcurrentHashMap<>());
+        synchronized (map) {
+            for(int ln=s; ln<=e; ln++) if(map.containsKey(ln)) return false;
+            for(int ln=s; ln<=e; ln++) map.put(ln, user);
+            return true;
+        }
+    }
+
+    private void releaseLineLock(String doc,int s,int e,String user){
+        Map<Integer,String> map = lineLocks.get(doc); if(map==null) return;
+        synchronized (map) {
+            for(int ln=s; ln<=e; ln++)
+                if(user.equals(map.get(ln))) map.remove(ln);
+            if(map.isEmpty()) lineLocks.remove(doc);
+        }
+    }
+
+    private void broadcastLineNotify(String doc,int s,int e,String owner){
+        CMUserEvent n = new CMUserEvent();
+        n.setStringID("LOCK_LINE_NOTIFY");
+        n.setEventField(CMInfo.CM_STR,"doc",doc);
+        n.setEventField(CMInfo.CM_INT,"startLine",""+s);
+        n.setEventField(CMInfo.CM_INT,"endLine",""+e);
+        n.setEventField(CMInfo.CM_STR,"owner",owner);
+        for(String u: docUsers.getOrDefault(doc, Set.of()))
+            m_serverStub.send(n, u);
+    }
+
+    private boolean ownsAllLines(String doc,String newText,String user){
+        Map<Integer,String> map = lineLocks.getOrDefault(doc, Map.of());
+        String[] lines = newText.split("\n",-1);   // 마지막 빈줄 포함
+        for(int ln=0; ln<lines.length; ln++){
+            if(!user.equals(map.get(ln))) return false;
+        }
+        return true;
+    }
 }
