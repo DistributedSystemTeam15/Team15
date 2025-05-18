@@ -194,9 +194,18 @@ public class CMServerEventHandler implements CMAppEventHandler {
                     if (doc != null && docUsers.containsKey(doc)) {
                         docUsers.get(doc).remove(user);
                         broadcastUserList(doc);
+
+                        Map<Integer, String> locks = lineLocks.get(doc);
+                        if(locks != null) {
+                            synchronized (locks) {
+                                locks.entrySet().removeIf(e -> user.equals(e.getValue()));
+                                if (locks.isEmpty()) lineLocks.remove(doc);
+                            }
+                            // 락 해제 후 전체 사용자에게 NOTIFY
+                            broadcastLineNotify(doc, 0, 1000, ""); // (범위는 실제 라인수만큼 조정 필요)
+                        }
                     }
                     userCurrentDoc.remove(user);
-
                     System.out.println("[SERVER] " + user + " logged out. (online=" + onlineUsers.size() + ")");
                 }
             }
@@ -282,7 +291,7 @@ public class CMServerEventHandler implements CMAppEventHandler {
                         String prevDoc = userCurrentDoc.get(user);
                         if (prevDoc != null && docUsers.containsKey(prevDoc)) {
                             docUsers.get(prevDoc).remove(user);
-                            broadcastUserList(prevDoc); // ✅ 추가!
+                            broadcastUserList(prevDoc);
                             System.out.println("사용자 [" + user + "] 기존 문서 [" + prevDoc + "] 편집 종료");
                         }
                     }
@@ -290,7 +299,7 @@ public class CMServerEventHandler implements CMAppEventHandler {
                     docUsers.get(docNameToSelect).add(user);
                     userCurrentDoc.put(user, docNameToSelect);
 
-                    // ✅ 현재 문서 사용자 리스트만 전송 (중복 제거)
+                    // 현재 문서 사용자 리스트만 전송 (중복 제거)
                     broadcastUserList(docNameToSelect);
 
                     sendDocContentToClient(user, docNameToSelect);
@@ -429,6 +438,7 @@ public class CMServerEventHandler implements CMAppEventHandler {
                     documents.remove(toDelete);
                     docUsers.remove(toDelete);
                     userCurrentDoc.entrySet().removeIf(e -> toDelete.equals(e.getValue()));
+                    lineLocks.remove(toDelete);
 
                     /* 파일 삭제 */
                     if (deleteDocumentFile(toDelete)) {
@@ -491,7 +501,7 @@ public class CMServerEventHandler implements CMAppEventHandler {
         if (content == null) content = "";
         CMUserEvent updateEvent = new CMUserEvent();
         updateEvent.setStringID("DOC_CONTENT");
-        updateEvent.setEventField(CMInfo.CM_STR, "name", docName);      // ✅ 추가!
+        updateEvent.setEventField(CMInfo.CM_STR, "name", docName);
         updateEvent.setEventField(CMInfo.CM_STR, "content", content);
         m_serverStub.send(updateEvent, targetUser);
     }
@@ -549,10 +559,15 @@ public class CMServerEventHandler implements CMAppEventHandler {
     }
 
     private void releaseLineLock(String doc,int s,int e,String user){
-        Map<Integer,String> map = lineLocks.get(doc); if(map==null) return;
+        Map<Integer,String> map = lineLocks.get(doc);
+        if(map==null) return;
         synchronized (map) {
-            for(int ln=s; ln<=e; ln++)
-                if(user.equals(map.get(ln))) map.remove(ln);
+            for(int ln=s; ln<=e; ln++){
+                String owner = map.get(ln);
+                if(user.equals(owner) || owner == null || owner.isBlank()) {
+                    map.remove(ln);
+                }
+            }
             if(map.isEmpty()) lineLocks.remove(doc);
         }
     }
@@ -566,14 +581,5 @@ public class CMServerEventHandler implements CMAppEventHandler {
         n.setEventField(CMInfo.CM_STR,"owner",owner);
         for(String u: docUsers.getOrDefault(doc, Set.of()))
             m_serverStub.send(n, u);
-    }
-
-    private boolean ownsAllLines(String doc,String newText,String user){
-        Map<Integer,String> map = lineLocks.getOrDefault(doc, Map.of());
-        String[] lines = newText.split("\n",-1);   // 마지막 빈줄 포함
-        for(int ln=0; ln<lines.length; ln++){
-            if(!user.equals(map.get(ln))) return false;
-        }
-        return true;
     }
 }
