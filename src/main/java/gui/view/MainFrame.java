@@ -1,4 +1,3 @@
-// ✅ MainFrame.java 수정본 - 문서 제목 및 참여자 표시 (상단 프로필 스타일)
 package gui.view;
 
 import java.awt.*;
@@ -26,11 +25,14 @@ public class MainFrame {
     private DefaultListModel<DocumentMeta> docListModel;
     private JList<DocumentMeta> docList;
 
+    private boolean isModified = false;
+    private boolean warnedAboutConflict = false;
+
     // 상단 현재 문서 정보 패널
     private JLabel currentDocLabel;
     private JLabel currentUsersLabel;
 
-    private JLabel onlineUserCountLabel;  // ✅ 접속자 수 레이블 추가
+    private JLabel onlineUserCountLabel;  // 접속자 수 레이블 추가
 
     public MainFrame(CMClientApp app) {
         this.clientApp = app;
@@ -72,8 +74,8 @@ public class MainFrame {
                     clientApp.selectDocument(sel.getName());          // ★ Core API 호출
                     setSaveEnabled(true);
                 }
-                // ✅ 우클릭 → 속성 보기 팝업
-                // ✅ 우클릭 → 속성 보기/삭제 팝업
+                // 우클릭 → 속성 보기 팝업
+                // 우클릭 → 속성 보기/삭제 팝업
                 if (SwingUtilities.isRightMouseButton(e) && !docList.isSelectionEmpty()) {
                     DocumentMeta selected = docList.getSelectedValue();
                     if (selected == null) return;
@@ -93,7 +95,7 @@ public class MainFrame {
                     del.addActionListener(ev -> deleteSelectedDocument());
 
                     menu.add(info);
-                    menu.add(del);  // ✅ 이 줄 추가!
+                    menu.add(del);
                     menu.show(docList, e.getX(), e.getY());
                 }
             }
@@ -144,7 +146,7 @@ public class MainFrame {
 
         /* 중앙 레이아웃 -------------------------------------------------- */
         JPanel center = new JPanel(new BorderLayout());
-        center.add(topPanel, BorderLayout.NORTH); // ✅ topPanel은 centerPanel에 추가
+        center.add(topPanel, BorderLayout.NORTH); // topPanel은 centerPanel에 추가
 
         // 오른쪽: 에디터와 접속자 패널을 나누는 스플릿
         JSplitPane rightSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, editScreen, onlineScroll);
@@ -155,14 +157,14 @@ public class MainFrame {
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, docScroll, rightSplit);
         split.setDividerLocation(250);
 
-        // ✅ 중앙 전체 패널 구성 완료
+        // 중앙 전체 패널 구성 완료
         center.add(split, BorderLayout.CENTER);
-        frame.add(center, BorderLayout.CENTER);  // ✅ frame에는 centerPanel만 넣기
+        frame.add(center, BorderLayout.CENTER);  // frame에는 centerPanel만 넣기
 
         /* 초기 진입 시 기본 안내 화면을 즉시 표시 */
         showWelcomeScreen();
 
-        // ✅ Ctrl+S 누르면 저장
+        // Ctrl+S 누르면 저장
         InputMap im = frame.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
         ActionMap am = frame.getRootPane().getActionMap();
 
@@ -188,20 +190,20 @@ public class MainFrame {
     public void setOnlineUsers(Collection<String> users) {
         onlineModel.clear();
         users.stream().distinct().forEach(onlineModel::addElement);
-        updateOnlineUserCount();  // ✅ 접속자 수 갱신
+        updateOnlineUserCount();  // 접속자 수 갱신
     }
 
     public void addOnlineUser(String user) {
         if (user == null || user.isBlank()) return;
         if (!onlineModel.contains(user)) {
             onlineModel.addElement(user);
-            updateOnlineUserCount();  // ✅ 접속자 수 갱신
+            updateOnlineUserCount();  // 접속자 수 갱신
         }
     }
 
     public void removeOnlineUser(String user) {
         onlineModel.removeElement(user);
-        updateOnlineUserCount();  // ✅ 접속자 수 갱신
+        updateOnlineUserCount();  // 접속자 수 갱신
     }
 
 
@@ -212,6 +214,8 @@ public class MainFrame {
     public void showWelcomeScreen() {
         setCurrentDocument("📄 Shared Text Editor");
         setCurrentDocumentUsers(List.of());
+        warnedAboutConflict = false;
+        editScreen.clearAllLocks();
 
         // 텍스트 영역에 기본 설명 넣기
         JTextArea textArea = editScreen.getTextArea();
@@ -263,9 +267,15 @@ public class MainFrame {
         });
     }
 
-    // ✅ 상단 문서 제목 갱신
+    // 상단 문서 제목 갱신
     public void setCurrentDocument(String name) {
-        currentDocLabel.setText("📄 " + name);
+        if (isModified) {
+            currentDocLabel.setText("📄 " + name + "*");
+        } else {
+            currentDocLabel.setText("📄 " + name);
+        }
+        warnedAboutConflict = false;
+        editScreen.clearAllLocks();
     }
 
     public void updateDocumentUsers(String docName, List<String> users) {
@@ -274,13 +284,13 @@ public class MainFrame {
             if (meta.getName().equals(docName)) {
                 meta.setActiveUsers(users);
                 docListModel.set(i, meta); // JList 업데이트 트리거
-                docList.repaint(); // ✅ 강제로 리스트 새로고침
+                docList.repaint(); // 강제로 리스트 새로고침
                 break;
             }
         }
     }
 
-    // ✅ 상단 접속 사용자 리스트 갱신
+    // 상단 접속 사용자 리스트 갱신
     public void setCurrentDocumentUsers(List<String> users) {
         if (users == null || users.isEmpty()) {
             currentUsersLabel.setText("Please select the document to edit");
@@ -294,6 +304,7 @@ public class MainFrame {
         if (!title.endsWith("*")) {
             currentDocLabel.setText(title + "*");
         }
+        isModified = true;
     }
 
     public void markDocumentSaved() {
@@ -301,6 +312,8 @@ public class MainFrame {
         if (title.endsWith("*")) {
             currentDocLabel.setText(title.substring(0, title.length() - 1));
         }
+        isModified = false;
+        warnedAboutConflict = false;
     }
 
     public void deleteSelectedDocument() {
@@ -313,5 +326,16 @@ public class MainFrame {
         if (DialogUtil.confirm("Delete the document \"" + sel.getName() + "\"?", "Confirm document deletion")) {
             clientApp.deleteDocument(sel.getName());            // ★ Core API 호출
         }
+    }
+
+    public boolean isModified() {
+        return isModified;
+    }
+
+    public boolean isWarnedAboutConflict() {
+        return warnedAboutConflict;
+    }
+    public void setWarnedAboutConflict(boolean warned) {
+        this.warnedAboutConflict = warned;
     }
 }

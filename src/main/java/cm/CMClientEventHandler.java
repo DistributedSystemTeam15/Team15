@@ -96,6 +96,9 @@ public class CMClientEventHandler implements CMAppEventHandler {
 
             /* 문서 내용 */
             case "DOC_CONTENT" -> {
+                System.out.println("[DEBUG] CMClientEventHandler received DOC_CONTENT for " +
+                        ue.getEventField(CMInfo.CM_STR, "name") +
+                        ", length=" + ue.getEventField(CMInfo.CM_STR, "content").length());
                 String name = ue.getEventField(CMInfo.CM_STR, "name");
                 String content = ue.getEventField(CMInfo.CM_STR, "content");
                 callback.onDocumentContentReceived(name, content);
@@ -115,6 +118,27 @@ public class CMClientEventHandler implements CMAppEventHandler {
             case "DOC_CLOSED" -> {
                 String name = ue.getEventField(CMInfo.CM_STR, "name");
                 callback.onDocumentClosed(name);
+            }
+
+            case "LOCK_LINE_ACK" -> {
+                String doc   = ue.getEventField(CMInfo.CM_STR,"doc");
+                int sLine    = Integer.parseInt(ue.getEventField(CMInfo.CM_INT,"startLine"));
+                int eLine    = Integer.parseInt(ue.getEventField(CMInfo.CM_INT,"endLine"));
+                boolean ok   = "1".equals(ue.getEventField(CMInfo.CM_INT,"ok"));
+                callback.onLineLockAck(doc,sLine,eLine,ok);
+            }
+
+            case "LOCK_LINE_NOTIFY" -> {
+                String doc   = ue.getEventField(CMInfo.CM_STR,"doc");
+                int sLine    = Integer.parseInt(ue.getEventField(CMInfo.CM_INT,"startLine"));
+                int eLine    = Integer.parseInt(ue.getEventField(CMInfo.CM_INT,"endLine"));
+                String owner = ue.getEventField(CMInfo.CM_STR,"owner");    // "" → 해제
+                callback.onLineLockUpdate(doc,sLine,eLine,owner==null?"":owner);
+            }
+
+            case "EDIT_REJECT" -> {
+                String rsn = ue.getEventField(CMInfo.CM_STR,"reason");
+                callback.onEditReject(rsn==null?"":rsn);
             }
 
             default -> { /* 알 수 없는 이벤트 무시 */ }

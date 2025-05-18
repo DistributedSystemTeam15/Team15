@@ -110,11 +110,27 @@ public final class GuiCallback implements ClientCallback {
     @Override
     public void onDocumentContentReceived(String name, String content) {
         runEdt(() -> {
+            System.out.println("[DEBUG] GuiCallback.onDocumentContentReceived: " + name +
+                    "  (length=" + content.length() + ")");
+
+            String oldContent = ui.getDocumentEditScreen().getTextArea().getText();
+            boolean hadUnsavedEdit = ui.isModified();
+            boolean contentChanged = !Objects.equals(oldContent, content);
+
+            if (hadUnsavedEdit && contentChanged && !ui.isWarnedAboutConflict()) {
+                DialogUtil.showInfoMessage(
+                        "Warning: You had unsaved changes, but the document was updated externally. Your changes may be lost.");
+                ui.setWarnedAboutConflict(true);
+                ui.markDocumentSaved();
+            } else if (!hadUnsavedEdit) {
+                ui.markDocumentSaved();
+            }
+
             clientCore.setCurrentDocName(name);
             ui.setCurrentDocument(name);
-            ui.getDocumentEditScreen().resetDocumentView();
-            ui.updateTextContent(content);
-            ui.getTextArea().setEditable(true);
+
+            ui.getDocumentEditScreen().clearAllLocks();
+            ui.getDocumentEditScreen().updateTextContent(content);
             ui.setSaveEnabled(true);
         });
     }
@@ -127,6 +143,7 @@ public final class GuiCallback implements ClientCallback {
         runEdt(() -> {
             if (name.equals(clientCore.getCurrentDocName())) {
                 clientCore.setCurrentDocName(null);
+                clientCore.setDocOpen(false);
                 ui.showWelcomeScreen();
                 ui.setSaveEnabled(false);
                 DialogUtil.showInfoMessage(
@@ -136,6 +153,19 @@ public final class GuiCallback implements ClientCallback {
                         "Document \"" + name + "\" has been deleted.");
             }
         });
+    }
+
+    @Override
+    public void onLineLockAck(String doc,int s,int e,boolean ok) {
+        runEdt(() -> ui.getDocumentEditScreen().handleLineLockAck(s,e,ok));
+    }
+    @Override
+    public void onLineLockUpdate(String doc,int s,int e,String owner) {
+        runEdt(() -> ui.getDocumentEditScreen().handleLineLockNotify(s,e,owner));
+    }
+    @Override
+    public void onEditReject(String reason) {
+        runEdt(() -> DialogUtil.showErrorMessage("Edit rejected: "+reason));
     }
 
     /* ========== EDT 헬퍼 ========== */
