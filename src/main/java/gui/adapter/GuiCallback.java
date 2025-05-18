@@ -113,6 +113,19 @@ public final class GuiCallback implements ClientCallback {
             System.out.println("[DEBUG] GuiCallback.onDocumentContentReceived: " + name +
                     "  (length=" + content.length() + ")");
 
+            String oldContent = ui.getDocumentEditScreen().getTextArea().getText();
+            boolean hadUnsavedEdit = ui.isModified();
+            boolean contentChanged = !Objects.equals(oldContent, content);
+
+            if (hadUnsavedEdit && contentChanged && !ui.isWarnedAboutConflict()) {
+                DialogUtil.showInfoMessage(
+                        "Warning: You had unsaved changes, but the document was updated externally. Your changes may be lost.");
+                ui.setWarnedAboutConflict(true);
+                ui.markDocumentSaved();
+            } else if (!hadUnsavedEdit) {
+                ui.markDocumentSaved();
+            }
+
             clientCore.setCurrentDocName(name);
             ui.setCurrentDocument(name);
 

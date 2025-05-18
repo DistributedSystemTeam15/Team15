@@ -9,7 +9,7 @@ public class DocumentMeta {
     private String lastEditorId;
     private String createdTime;
     private String lastModifiedTime;
-    private List<String> activeUsers = new ArrayList<>();  // ✅ 추가
+    private List<String> activeUsers = new ArrayList<>();
 
     public DocumentMeta(String name, String creatorId, String lastEditorId,
                         String createdTime, String lastModifiedTime) {

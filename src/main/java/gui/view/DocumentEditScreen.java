@@ -5,6 +5,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.*;
+import java.util.List;
 import java.util.Timer;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -42,7 +43,7 @@ public class DocumentEditScreen extends JPanel {
         int rawStart = textArea.getSelectionStart();
         int rawEnd   = textArea.getSelectionEnd();
 
-        // 2) sLine 계산 (예외 시 0으로)
+        // sLine 계산 (예외 시 0으로)
         int sLine;
         try {
             sLine = textArea.getLineOfOffset(rawStart);
@@ -50,7 +51,7 @@ public class DocumentEditScreen extends JPanel {
             sLine = 0;
         }
 
-        // 3) eLine 계산 (끝 offset -1 → 예외 시 sLine로)
+        // eLine 계산 (끝 offset -1 → 예외 시 sLine로)
         int endPos = rawEnd > 0 ? rawEnd - 1 : 0;
         int eLine;
         try {
@@ -59,36 +60,50 @@ public class DocumentEditScreen extends JPanel {
             eLine = sLine;
         }
 
-        // 4) 라인 번호를 [0, 마지막라인] 범위로 클램핑
+        // 라인 번호를 [0, 마지막라인] 범위로 클램핑
         int maxLine = textArea.getLineCount() - 1;
         sLine = Math.max(0, Math.min(sLine, maxLine));
         eLine = Math.max(0, Math.min(eLine, maxLine));
         if (eLine < sLine) eLine = sLine;
 
-        // 5) 지난번과 같으면 무시
-        if (sLine == lastStart && eLine == lastEnd) {
-            return;
-        }
 
-        // 6) 이미 잠금된 타인 라인 체크
+        // 이미 잠금된 타인 라인 포함되면 선택 불가 (UI Feedback)
         for (int ln = sLine; ln <= eLine; ln++) {
             if (lockedLines.contains(ln) && !myLines.contains(ln)) {
+                // 타인 락된 라인 포함 → 선택 불가
                 Toolkit.getDefaultToolkit().beep();
+                // 선택을 직전 내 락 영역으로 복원 (있으면)
+                if (!myLines.isEmpty()) {
+                    int prevStart = Collections.min(myLines);
+                    int prevEnd   = Collections.max(myLines);
+                    try {
+                        int selLo = textArea.getLineStartOffset(prevStart);
+                        int selHi = textArea.getLineEndOffset(prevEnd);
+                        textArea.select(selLo, selHi);
+                    } catch (BadLocationException ignored) {}
+                }
                 return;
             }
         }
 
-        // 7) 기존 내 락 해제
+        // 지난번과 같으면 무시
+        if (sLine == lastStart && eLine == lastEnd) {
+            return;
+        }
+
+        // 기존 내 락 해제
         if (!myLines.isEmpty()) {
             int relStart = Collections.min(myLines);
             int relEnd   = Collections.max(myLines);
-            core.releaseLineLock(relStart, relEnd);
+            if (relStart != sLine || relEnd != eLine) {
+                core.releaseLineLock(relStart, relEnd);
+            }
         }
 
-        // 8) 새 라인 락 요청
+        // 새 라인 락 요청
         core.requestLineLock(sLine, eLine);
 
-        // 9) 요청 범위 기록
+        // 요청 범위 기록
         lastStart = sLine;
         lastEnd   = eLine;
     }
@@ -307,20 +322,40 @@ public class DocumentEditScreen extends JPanel {
 
     public void clearAllLocks() {
         Highlighter hl = textArea.getHighlighter();
-        // 1) 녹색(내 락) 태그 전부 제거
+
+        // 서버에 내 락 전부 해제 요청 (연속 구간 단위로)
+        if (!myLines.isEmpty()) {
+            List<Integer> lines = new ArrayList<>(myLines);
+            Collections.sort(lines);
+            int prev = lines.get(0), start = prev, end = prev;
+            for (int i = 1; i < lines.size(); i++) {
+                int cur = lines.get(i);
+                if (cur == end + 1) {
+                    end = cur;  // 연속
+                } else {
+                    // 연속 끝났으면 release
+                    core.releaseLineLock(start, end);
+                    start = end = cur;
+                }
+            }
+            // 마지막 구간 해제
+            core.releaseLineLock(start, end);
+        }
+
+        // 녹색(내 락) 태그 전부 제거
         for (Object tag : myLineTags.values()) {
             hl.removeHighlight(tag);
         }
         myLineTags.clear();
         myLines.clear();
 
-        // 2) 빨간색(타인 락) 태그 전부 제거
+        // 빨간색(타인 락) 태그 전부 제거
         for (Object tag : foreignLineTags.values()) {
             hl.removeHighlight(tag);
         }
         foreignLineTags.clear();
 
-        // 3) lockedLines, lastStart/lastEnd 초기화
+        // lockedLines, lastStart/lastEnd 초기화
         lockedLines.clear();
         lastStart = lastEnd = -1;
     }
@@ -333,6 +368,13 @@ public class DocumentEditScreen extends JPanel {
         SwingUtilities.invokeLater(() -> {
             ignore = true;
 
+            // 잠금 해제: 서버에도 내 락이 있으면 release 요청 (모든 내 락 해제)
+            if (!myLines.isEmpty()) {
+                int relStart = Collections.min(myLines);
+                int relEnd = Collections.max(myLines);
+                core.releaseLineLock(relStart, relEnd);
+            }
+
             textArea.setText("");
             textArea.setEditable(editable);
             core.setDocOpen(editable);
@@ -342,6 +384,7 @@ public class DocumentEditScreen extends JPanel {
             foreignLineTags.clear();
             myLines.clear();
             lockedLines.clear();
+            lastStart = lastEnd = -1;
 
             ignore = false;
         });
