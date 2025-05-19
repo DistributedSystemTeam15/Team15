@@ -34,6 +34,7 @@ public class DocumentEditScreen extends JPanel {
 
     // 마지막으로 요청했던 락 범위
     private int lastStart = -1, lastEnd = -1;
+    private int lastCaretPosition = 0;
 
     /* selection 변경 → 라인 계산 */
     private void handleSelectionChange() {
@@ -191,6 +192,16 @@ public class DocumentEditScreen extends JPanel {
         return textArea;
     }
 
+    public int getLineAtCaret(JTextArea textArea) {
+        int caretPosition = textArea.getCaretPosition();
+        try {
+            return textArea.getLineOfOffset(caretPosition);
+        } catch (BadLocationException ex) {
+            ex.printStackTrace();
+            return -1; // 예외 발생 시
+        }
+    }
+
     private void buildUI() {
         setLayout(new BorderLayout());
 
@@ -205,7 +216,23 @@ public class DocumentEditScreen extends JPanel {
         });
 
         // 캐럿(커서) 이동 시 락 요청
-        textArea.addCaretListener(e -> handleSelectionChange());
+        //textArea.addCaretListener(e -> handleSelectionChange());
+        textArea.addCaretListener(e -> {
+            int caretPos = e.getDot();
+            int line = getLineAtCaret(textArea);
+
+            // 락된 라인일 경우 커서 위치 복원
+            if (lockedLines.contains(line) && !myLines.contains(line)) {
+                /*SwingUtilities.invokeLater(() -> {
+                    textArea.setCaretPosition(lastCaretPosition); // 즉시 복원
+                }*/
+                textArea.setCaretPosition(lastCaretPosition); // 즉시 복원);
+            } else {
+                lastCaretPosition = caretPos; // 락 안된 라인일 경우에만 저장
+                handleSelectionChange();
+            }
+        });
+
 
         // 마우스 드래그 뒤 버튼 해제 시 락 요청
         textArea.addMouseListener(new MouseAdapter() {
@@ -222,7 +249,7 @@ public class DocumentEditScreen extends JPanel {
 
                 try{
                     int curLn=textArea.getLineOfOffset(textArea.getCaretPosition());
-                    if(!myLines.contains(curLn)){
+                    if(lockedLines.contains(curLn) && !myLines.contains(curLn)){
                         Toolkit.getDefaultToolkit().beep(); return;
                     }
                 }catch(BadLocationException ignored){}
@@ -233,7 +260,7 @@ public class DocumentEditScreen extends JPanel {
                 restartIdleTimer();
             }
 
-            public void insertUpdate(DocumentEvent e) {
+            public void insertUpdate(DocumentEvent e){
                 changed();
             }
 
