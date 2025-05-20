@@ -5,10 +5,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import kr.ac.konkuk.ccslab.cm.event.CMEvent;
 import kr.ac.konkuk.ccslab.cm.event.CMUserEvent;
@@ -19,7 +16,6 @@ import kr.ac.konkuk.ccslab.cm.event.CMSessionEvent;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.util.Date;
 import java.util.concurrent.ConcurrentHashMap;
 
 
@@ -190,22 +186,30 @@ public class CMServerEventHandler implements CMAppEventHandler {
                 }
                 case CMSessionEvent.LOGOUT, CMSessionEvent.SESSION_REMOVE_USER -> {
                     onlineUsers.remove(user);
-                    String doc = userCurrentDoc.get(user);
-                    if (doc != null && docUsers.containsKey(doc)) {
-                        docUsers.get(doc).remove(user);
-                        broadcastUserList(doc);
-
+                    String doc = userCurrentDoc.remove(user);
+                    if (doc != null) {
                         Map<Integer, String> locks = lineLocks.get(doc);
-                        if(locks != null) {
+                        if (locks != null) {
+                            List<Integer> owned;
                             synchronized (locks) {
-                                locks.entrySet().removeIf(e -> user.equals(e.getValue()));
+                                // (a) 실제 소유 라인 번호만 수집
+                                owned = locks.entrySet().stream()
+                                        .filter(e -> user.equals(e.getValue()))
+                                        .map(Map.Entry::getKey)
+                                        .toList();
+                                // (b) 소유 라인 해제
+                                owned.forEach(locks::remove);
+                                // (c) 비어 있으면 전체 맵 제거
                                 if (locks.isEmpty()) lineLocks.remove(doc);
                             }
-                            // 락 해제 후 전체 사용자에게 NOTIFY
-                            broadcastLineNotify(doc, 0, 1000, ""); // (범위는 실제 라인수만큼 조정 필요)
+                            // (d) 해제된 라인만 Notify
+                            owned.forEach(ln -> broadcastLineNotify(doc, ln, ln, ""));
+                        }
+                        if (docUsers.containsKey(doc)) {
+                            docUsers.get(doc).remove(user);
+                            broadcastUserList(doc);
                         }
                     }
-                    userCurrentDoc.remove(user);
                     System.out.println("[SERVER] " + user + " logged out. (online=" + onlineUsers.size() + ")");
                 }
             }
@@ -289,10 +293,15 @@ public class CMServerEventHandler implements CMAppEventHandler {
                     // 이전에 사용자가 열었던 문서가 있다면 그 문서에서 해당 사용자를 제거
                     if (userCurrentDoc.containsKey(user)) {
                         String prevDoc = userCurrentDoc.get(user);
-                        if (prevDoc != null && docUsers.containsKey(prevDoc)) {
-                            docUsers.get(prevDoc).remove(user);
-                            broadcastUserList(prevDoc);
-                            System.out.println("사용자 [" + user + "] 기존 문서 [" + prevDoc + "] 편집 종료");
+                        if (prevDoc != null) {
+                            /* 이전 문서에서 내 락 전부 해제 */
+                            releaseAllLocksOf(prevDoc, user);
+
+                            /* 편집자 목록에서도 제거 */
+                            if (docUsers.containsKey(prevDoc)) {
+                                docUsers.get(prevDoc).remove(user);
+                                broadcastUserList(prevDoc);
+                            }
                         }
                     }
 
@@ -303,6 +312,7 @@ public class CMServerEventHandler implements CMAppEventHandler {
                     broadcastUserList(docNameToSelect);
 
                     sendDocContentToClient(user, docNameToSelect);
+                    sendCurrentLocks(user, docNameToSelect);
                     broadcastDocumentList();
 
                     break;
@@ -552,7 +562,10 @@ public class CMServerEventHandler implements CMAppEventHandler {
         Map<Integer,String> map = lineLocks
                 .computeIfAbsent(doc,d->new ConcurrentHashMap<>());
         synchronized (map) {
-            for(int ln=s; ln<=e; ln++) if(map.containsKey(ln)) return false;
+            for (int ln = s; ln <= e; ln++) {
+                String owner = map.get(ln);
+                if (owner != null && !owner.equals(user)) return false;
+            }
             for(int ln=s; ln<=e; ln++) map.put(ln, user);
             return true;
         }
@@ -582,4 +595,68 @@ public class CMServerEventHandler implements CMAppEventHandler {
         for(String u: docUsers.getOrDefault(doc, Set.of()))
             m_serverStub.send(n, u);
     }
+
+    private void sendCurrentLocks(String user, String doc) {
+        Map<Integer,String> locks = lineLocks.get(doc);
+        if (locks == null || locks.isEmpty()) return;
+
+        /* 소유자별‧연속 구간 단위로 묶어서 NOTIFY */
+        List<Integer> lines = new ArrayList<>(locks.keySet());
+        Collections.sort(lines);
+
+        int start = -1, prev = -2;
+        String owner = null;
+        for (int ln : lines) {
+            String o = locks.get(ln);
+            if (start == -1) {               // 첫 줄
+                start = prev = ln; owner = o; continue;
+            }
+            if (ln == prev + 1 && Objects.equals(o, owner)) {   // 같은 소유자+연속
+                prev = ln; continue;
+            }
+            /* 구간 끝 → 전송 */
+            sendLineNotify(user, doc, start, prev, owner);
+            start = prev = ln; owner = o;
+        }
+        /* 마지막 구간 */
+        sendLineNotify(user, doc, start, prev, owner);
+    }
+
+    private void sendLineNotify(String user, String doc, int s, int e, String owner) {
+        CMUserEvent ev = new CMUserEvent();
+        ev.setStringID("LOCK_LINE_NOTIFY");
+        ev.setEventField(CMInfo.CM_STR, "doc", doc);
+        ev.setEventField(CMInfo.CM_INT, "startLine", "" + s);
+        ev.setEventField(CMInfo.CM_INT, "endLine",   "" + e);
+        ev.setEventField(CMInfo.CM_STR, "owner", owner);
+        m_serverStub.send(ev, user);
+    }
+
+    /* util ─ 한 사용자가 가진 모든 락을 해제 & 브로드캐스트 */
+    private void releaseAllLocksOf(String doc, String user){
+        Map<Integer,String> map = lineLocks.get(doc);
+        if(map == null) return;
+
+        /* 내가 가진 라인 번호만 모아둔다 */
+        List<Integer> owned = new ArrayList<>();
+        synchronized (map){
+            map.entrySet().removeIf(e -> {
+                boolean mine = user.equals(e.getValue());
+                if(mine) owned.add(e.getKey());
+                return mine;              // → map 에서 제거
+            });
+            if(map.isEmpty()) lineLocks.remove(doc);
+        }
+        /* 연속 구간 단위로 묶어 unlock NOTIFY */
+        Collections.sort(owned);
+        int st = -1, prev = -2;
+        for(int ln : owned){
+            if(st == -1){ st = prev = ln; continue; }
+            if(ln == prev + 1){ prev = ln; continue; }
+            broadcastLineNotify(doc, st, prev, "");  // 🔓
+            st = prev = ln;
+        }
+        if(st != -1) broadcastLineNotify(doc, st, prev, "");
+    }
+
 }

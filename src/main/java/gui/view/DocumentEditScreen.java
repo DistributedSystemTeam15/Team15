@@ -16,33 +16,40 @@ import javax.swing.text.Highlighter;
 import javax.swing.undo.UndoManager;
 
 import cm.CMClientApp;
+import cm.util.EventQueueManager;
 
 public class DocumentEditScreen extends JPanel {
     private final CMClientApp core;
     private final JTextArea textArea = new JTextArea(25, 50);
     private final UndoManager undo = new UndoManager();
 
-    private final Map<Integer,Object> myLineTags      = new HashMap<>();
-    private final Map<Integer,Object> foreignLineTags = new HashMap<>();
+    private final Map<Integer, Object> myLineTags = new HashMap<>();
+    private final Map<Integer, Object> foreignLineTags = new HashMap<>();
     private final Set<Integer> myLines = new HashSet<>();
     private final Set<Integer> lockedLines = new HashSet<>();
 
     private static final Highlighter.HighlightPainter PAINT_MY =
-            new DefaultHighlighter.DefaultHighlightPainter(new Color(0,180,0,80));
+            new DefaultHighlighter.DefaultHighlightPainter(new Color(0, 180, 0, 80));
     private static final Highlighter.HighlightPainter PAINT_FOREIGN =
-            new DefaultHighlighter.DefaultHighlightPainter(new Color(200,0,0,60));
+            new DefaultHighlighter.DefaultHighlightPainter(new Color(200, 0, 0, 60));
 
     // 마지막으로 요청했던 락 범위
     private int lastStart = -1, lastEnd = -1;
     private int lastCaretPosition = 0;
 
-    /* selection 변경 → 라인 계산 */
+    private final EventQueueManager eventQueue = new EventQueueManager();
+    private boolean ignore = false;
+
     private void handleSelectionChange() {
-        if (ignore) return;
+        eventQueue.dispatchOrQueue(this::actuallyHandleSelectionChange);
+    }
+
+    /* selection 변경 → 라인 계산 */
+    private void actuallyHandleSelectionChange() {
 
         // 1) 원시 선택 오프셋
         int rawStart = textArea.getSelectionStart();
-        int rawEnd   = textArea.getSelectionEnd();
+        int rawEnd = textArea.getSelectionEnd();
 
         // sLine 계산 (예외 시 0으로)
         int sLine;
@@ -53,7 +60,14 @@ public class DocumentEditScreen extends JPanel {
         }
 
         // eLine 계산 (끝 offset -1 → 예외 시 sLine로)
-        int endPos = rawEnd > 0 ? rawEnd - 1 : 0;
+        int endPos;
+        if (rawStart == rawEnd) {                                // 선택 없이 caret만
+            endPos = rawEnd == textArea.getDocument().getLength() && rawEnd > 0
+                    ? rawEnd - 1                                  // ← 마지막 글자 포함
+                    : rawEnd;
+        } else {
+            endPos = rawEnd > 0 ? rawEnd - 1 : 0;
+        }
         int eLine;
         try {
             eLine = textArea.getLineOfOffset(endPos);
@@ -76,12 +90,13 @@ public class DocumentEditScreen extends JPanel {
                 // 선택을 직전 내 락 영역으로 복원 (있으면)
                 if (!myLines.isEmpty()) {
                     int prevStart = Collections.min(myLines);
-                    int prevEnd   = Collections.max(myLines);
+                    int prevEnd = Collections.max(myLines);
                     try {
                         int selLo = textArea.getLineStartOffset(prevStart);
                         int selHi = textArea.getLineEndOffset(prevEnd);
                         textArea.select(selLo, selHi);
-                    } catch (BadLocationException ignored) {}
+                    } catch (BadLocationException ignored) {
+                    }
                 }
                 return;
             }
@@ -95,7 +110,7 @@ public class DocumentEditScreen extends JPanel {
         // 기존 내 락 해제
         if (!myLines.isEmpty()) {
             int relStart = Collections.min(myLines);
-            int relEnd   = Collections.max(myLines);
+            int relEnd = Collections.max(myLines);
             if (relStart != sLine || relEnd != eLine) {
                 core.releaseLineLock(relStart, relEnd);
             }
@@ -106,11 +121,11 @@ public class DocumentEditScreen extends JPanel {
 
         // 요청 범위 기록
         lastStart = sLine;
-        lastEnd   = eLine;
+        lastEnd = eLine;
     }
 
     /* ----- 서버 ACK 수신 ----- */
-    public void handleLineLockAck(int s,int e,boolean ok){
+    public void handleLineLockAck(int s, int e, boolean ok) {
         // stale ACK 방지: 마지막 요청 범위와 다르면,
         // 서버에 쌓인 “out-of-order” 락을 즉시 해제하고 리턴
         if (s != lastStart || e != lastEnd) {
@@ -118,7 +133,10 @@ public class DocumentEditScreen extends JPanel {
             return;
         }
 
-        if(!ok){ Toolkit.getDefaultToolkit().beep(); return; }
+        if (!ok) {
+            Toolkit.getDefaultToolkit().beep();
+            return;
+        }
 
         Highlighter hl = textArea.getHighlighter();
         Set<Integer> previous = new HashSet<>(myLines);
@@ -135,53 +153,66 @@ public class DocumentEditScreen extends JPanel {
         for (int ln = s; ln <= e; ln++) {
             try {
                 int lo = textArea.getLineStartOffset(ln);
-                int hi = textArea.getLineEndOffset(ln);
+                int hi;
+                if (ln == textArea.getLineCount() - 1) {
+                    hi = textArea.getDocument().getLength();
+                } else {
+                    hi = textArea.getLineEndOffset(ln);
+                }
                 Object tag = hl.addHighlight(lo, hi, PAINT_MY);
                 myLineTags.put(ln, tag);
                 myLines.add(ln);
                 lockedLines.add(ln);
-            } catch (BadLocationException ignored) {}
+            } catch (BadLocationException ignored) {
+            }
         }
         // ack 성공 기준으로 lastStart/lastEnd 확정
         lastStart = s;
-        lastEnd   = e;
+        lastEnd = e;
 
         restartIdleTimer();
     }
 
+    public void handleLineLockNotify(int s, int e, String owner) {
+        eventQueue.dispatchOrQueue(() -> actuallyHandleLineLockNotify(s, e, owner));
+    }
+
     /* ----- NOTIFY 수신 ----- */
-    public void handleLineLockNotify(int s,int e,String owner){
+    public void actuallyHandleLineLockNotify(int s, int e, String owner) {
         SwingUtilities.invokeLater(() -> {
             Highlighter hl = textArea.getHighlighter();
-            for(int ln=s; ln<=e; ln++){
-                if(owner.isEmpty()){
+            for (int ln = s; ln <= e; ln++) {
+                if (owner.isEmpty()) {
                     // (1) 빨간 태그 제거
                     Object redTag = foreignLineTags.remove(ln);
-                    if(redTag != null) hl.removeHighlight(redTag);
+                    if (redTag != null) hl.removeHighlight(redTag);
                     // (2) 초록 태그 제거
                     Object greenTag = myLineTags.remove(ln);
-                    if(greenTag != null) hl.removeHighlight(greenTag);
+                    if (greenTag != null) hl.removeHighlight(greenTag);
                     // (3) 집합에서도 제거
                     myLines.remove(ln);
                     lockedLines.remove(ln);
-                }else if(!owner.equals(core.getStub().getMyself().getName())){
+                } else if (!owner.equals(core.getStub().getMyself().getName())) {
                     // 갱신 전, 기존 빨간 태그 제거
                     Object oldTag = foreignLineTags.remove(ln);
                     if (oldTag != null) hl.removeHighlight(oldTag);
-                    try{
-                        int lo=textArea.getLineStartOffset(ln);
-                        int hi=textArea.getLineEndOffset(ln);
-                        Object tag=textArea.getHighlighter().addHighlight(lo,hi,PAINT_FOREIGN);
+                    try {
+                        int lo = textArea.getLineStartOffset(ln);
+                        int hi;
+                        if (ln == textArea.getLineCount() - 1) {
+                            hi = textArea.getDocument().getLength();
+                        } else {
+                            hi = textArea.getLineEndOffset(ln);
+                        }
+                        Object tag = textArea.getHighlighter().addHighlight(lo, hi, PAINT_FOREIGN);
                         foreignLineTags.put(ln, tag);
                         lockedLines.add(ln);
-                    }catch(BadLocationException ignored){}
+                    } catch (BadLocationException ignored) {
+                    }
                 }
             }
         });
     }
-
-    // 플래그: 프로그램에 의한 텍스트 업데이트 시 이벤트 무시
-    private boolean ignore = false;
 
     public DocumentEditScreen(CMClientApp core) {
         this.core = core;
@@ -226,11 +257,16 @@ public class DocumentEditScreen extends JPanel {
                 /*SwingUtilities.invokeLater(() -> {
                     textArea.setCaretPosition(lastCaretPosition); // 즉시 복원
                 }*/
-                textArea.setCaretPosition(lastCaretPosition); // 즉시 복원);
-            } else {
-                lastCaretPosition = caretPos; // 락 안된 라인일 경우에만 저장
-                handleSelectionChange();
+//                textArea.setCaretPosition(lastCaretPosition); // 즉시 복원);
+//                lastCaretPosition = textArea.getCaretPosition();
+                int safePos = lastCaretPosition;       // 이전에 유효했던 위치
+                SwingUtilities.invokeLater(() -> textArea.setCaretPosition(safePos));
+                lastCaretPosition = safePos;
+                return;
             }
+            lastCaretPosition = caretPos; // 락 안된 라인일 경우에만 저장
+            handleSelectionChange();
+
         });
 
 
@@ -247,12 +283,14 @@ public class DocumentEditScreen extends JPanel {
             private void changed() {
                 if (ignore) return;
 
-                try{
-                    int curLn=textArea.getLineOfOffset(textArea.getCaretPosition());
-                    if(lockedLines.contains(curLn) && !myLines.contains(curLn)){
-                        Toolkit.getDefaultToolkit().beep(); return;
+                try {
+                    int curLn = textArea.getLineOfOffset(textArea.getCaretPosition());
+                    if (lockedLines.contains(curLn) && !myLines.contains(curLn)) {
+                        Toolkit.getDefaultToolkit().beep();
+                        return;
                     }
-                }catch(BadLocationException ignored){}
+                } catch (BadLocationException ignored) {
+                }
                 System.out.println("[DEBUG] Local edit detected; text length=" + textArea.getText().length());
 
                 core.editCurrentDocument(textArea.getText());
@@ -260,7 +298,7 @@ public class DocumentEditScreen extends JPanel {
                 restartIdleTimer();
             }
 
-            public void insertUpdate(DocumentEvent e){
+            public void insertUpdate(DocumentEvent e) {
                 changed();
             }
 
@@ -278,28 +316,30 @@ public class DocumentEditScreen extends JPanel {
     /* ---------------------------------------------------------------- */
     public void updateTextContent(String newText) {
         SwingUtilities.invokeLater(() -> {
-            ignore = true;
-//            clearAllLocks();
 
+            eventQueue.bufferEvents();
+            ignore = true;
+
+//            clearAllLocks();
             /* 0) 기존 상태 보관 */
-            String oldText   = textArea.getText();
+            String oldText = textArea.getText();
             System.out.println("[DEBUG] updating UI textArea to new content (oldText len=" +
                     oldText.length() + ", newText len=" + newText.length() + ")");
-            int    caretPos  = textArea.getCaretPosition();
-            int    selStart  = textArea.getSelectionStart();
-            int    selEnd    = textArea.getSelectionEnd();
+            int caretPos = textArea.getCaretPosition();
+            int selStart = textArea.getSelectionStart();
+            int selEnd = textArea.getSelectionEnd();
 
             /* 1) old ↔ new 첫 번째 차이 지점과 길이 차이 계산 */
             int diffIdx = 0;
-            int minLen  = Math.min(oldText.length(), newText.length());
+            int minLen = Math.min(oldText.length(), newText.length());
             while (diffIdx < minLen && oldText.charAt(diffIdx) == newText.charAt(diffIdx))
                 diffIdx++;
 
             // 변경이 caret 앞쪽에서 일어난 경우에만 보정
             int delta = newText.length() - oldText.length();
-            if (diffIdx <= caretPos)       caretPos += delta;
-            if (diffIdx <= selStart)       selStart += delta;
-            if (diffIdx <= selEnd)         selEnd   += delta;
+            if (diffIdx <= caretPos) caretPos += delta;
+            if (diffIdx <= selStart) selStart += delta;
+            if (diffIdx <= selEnd) selEnd += delta;
 
             /* 2) 텍스트 치환 */
             textArea.setText(newText);
@@ -316,7 +356,8 @@ public class DocumentEditScreen extends JPanel {
                     int hi = textArea.getLineEndOffset(ln);
                     Object newTag = hl.addHighlight(lo, hi, PAINT_MY);
                     entry.setValue(newTag);
-                } catch (BadLocationException ignored) {}
+                } catch (BadLocationException ignored) {
+                }
             }
 
             // 빨간 락 재적용
@@ -327,14 +368,15 @@ public class DocumentEditScreen extends JPanel {
                     int hi = textArea.getLineEndOffset(ln);
                     Object newTag = hl.addHighlight(lo, hi, PAINT_FOREIGN);
                     entry.setValue(newTag);
-                } catch (BadLocationException ignored) {}
+                } catch (BadLocationException ignored) {
+                }
             }
 
             /* 3) 보정된 위치로 복원 (경계를 넘어가면 마지막 글자에 맞춤) */
             int max = newText.length();
             caretPos = Math.max(0, Math.min(caretPos, max));
             selStart = Math.max(0, Math.min(selStart, max));
-            selEnd   = Math.max(0, Math.min(selEnd,   max));
+            selEnd = Math.max(0, Math.min(selEnd, max));
 
             textArea.setCaretPosition(caretPos);
             textArea.select(selStart, selEnd);
@@ -344,6 +386,7 @@ public class DocumentEditScreen extends JPanel {
                 core.setDocOpen(true);
             }
             ignore = false;
+            eventQueue.releaseEvents();
         });
     }
 
@@ -393,7 +436,7 @@ public class DocumentEditScreen extends JPanel {
 
     public void resetDocumentView(boolean editable) {
         SwingUtilities.invokeLater(() -> {
-            ignore = true;
+//            ignore = true;
 
             // 잠금 해제: 서버에도 내 락이 있으면 release 요청 (모든 내 락 해제)
             if (!myLines.isEmpty()) {
@@ -413,21 +456,38 @@ public class DocumentEditScreen extends JPanel {
             lockedLines.clear();
             lastStart = lastEnd = -1;
 
-            ignore = false;
+//            ignore = false;
         });
     }
 
     /* 5 초 idle-timer (필드) */
-    private final Timer idleTimer=new Timer(true);
+    private final Timer idleTimer = new Timer(true);
     private TimerTask idleTask;
-    private void restartIdleTimer(){
-        if(idleTask!=null) idleTask.cancel();
-        idleTask=new TimerTask(){
-            @Override public void run(){
-                if(!myLines.isEmpty())
-                    core.releaseLineLock(Collections.min(myLines),Collections.max(myLines));
+
+    private void restartIdleTimer() {
+        if (idleTask != null) idleTask.cancel();
+        idleTask = new TimerTask() {
+            @Override
+            public void run() {
+                if (myLines.isEmpty()) return;
+
+                List<Integer> lines = new ArrayList<>(myLines);
+                Collections.sort(lines);
+
+                int start = lines.get(0), end = start;
+                for (int i = 1; i < lines.size(); i++) {
+                    int cur = lines.get(i);
+                    if (cur == end + 1) {            // 연속
+                        end = cur;
+                    } else {                         // 끊김 → 이전 구간 해제
+                        core.releaseLineLock(start, end);
+                        start = end = cur;
+                    }
+                }
+                /* 마지막 구간 */
+                core.releaseLineLock(start, end);
             }
         };
-        idleTimer.schedule(idleTask,5000);
+        idleTimer.schedule(idleTask, 5000);
     }
 }
