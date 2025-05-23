@@ -39,4 +39,6 @@ build/
 
 client-file-path/
 server-file-path/
+.\client-file-path/
+.\server-file-path/
 documents/
