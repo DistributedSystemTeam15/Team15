@@ -259,9 +259,10 @@ public class DocumentEditScreen extends JPanel {
                 }*/
 //                textArea.setCaretPosition(lastCaretPosition); // 즉시 복원);
 //                lastCaretPosition = textArea.getCaretPosition();
-                int safePos = lastCaretPosition;       // 이전에 유효했던 위치
+                /*int safePos = lastCaretPosition;       // 이전에 유효했던 위치
                 SwingUtilities.invokeLater(() -> textArea.setCaretPosition(safePos));
-                lastCaretPosition = safePos;
+                lastCaretPosition = safePos;*/
+                textArea.setCaretPosition(lastCaretPosition);
                 return;
             }
             lastCaretPosition = caretPos; // 락 안된 라인일 경우에만 저장
@@ -310,6 +311,35 @@ public class DocumentEditScreen extends JPanel {
                 changed();
             }
         });
+
+        DocumentFilter secureFilter = new DocumentFilter() {
+            @Override
+            public void insertString(FilterBypass fb, int offset, String string, AttributeSet attr) throws BadLocationException {
+                int line = textArea.getLineOfOffset(offset);
+                if (lockedLines.contains(line) && !myLines.contains(line)) {return;}
+                super.insertString(fb, offset, string, attr);
+                handleSelectionChange();
+            }
+
+            @Override
+            public void replace(FilterBypass fb, int offset, int length, String text, AttributeSet attrs) throws BadLocationException {
+                int line = textArea.getLineOfOffset(offset);
+                if (lockedLines.contains(line) && !myLines.contains(line)) {return;}
+                super.replace(fb, offset, length, text, attrs);
+                handleSelectionChange();
+            }
+
+            @Override
+            public void remove(FilterBypass fb, int offset, int length) throws BadLocationException {
+                int line = textArea.getLineOfOffset(offset);
+                if (lockedLines.contains(line) && !myLines.contains(line)) {return;}
+                super.remove(fb, offset, length);
+                handleSelectionChange();
+            }
+        };
+
+        ((AbstractDocument) textArea.getDocument()).setDocumentFilter(secureFilter);
+        
         add(new JScrollPane(textArea), BorderLayout.CENTER);
     }
 
