@@ -10,9 +10,7 @@ import java.util.Timer;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import javax.swing.text.BadLocationException;
-import javax.swing.text.DefaultHighlighter;
-import javax.swing.text.Highlighter;
+import javax.swing.text.*;
 import javax.swing.undo.UndoManager;
 
 import cm.CMClientApp;
@@ -41,6 +39,8 @@ public class DocumentEditScreen extends JPanel {
     private boolean ignore = false;
 
     private void handleSelectionChange() {
+        if (ignore) return;
+
         eventQueue.dispatchOrQueue(this::actuallyHandleSelectionChange);
     }
 
@@ -316,7 +316,9 @@ public class DocumentEditScreen extends JPanel {
             @Override
             public void insertString(FilterBypass fb, int offset, String string, AttributeSet attr) throws BadLocationException {
                 int line = textArea.getLineOfOffset(offset);
-                if (lockedLines.contains(line) && !myLines.contains(line)) {return;}
+                if (lockedLines.contains(line) && !myLines.contains(line)) {
+                    return;
+                }
                 super.insertString(fb, offset, string, attr);
                 handleSelectionChange();
             }
@@ -324,7 +326,9 @@ public class DocumentEditScreen extends JPanel {
             @Override
             public void replace(FilterBypass fb, int offset, int length, String text, AttributeSet attrs) throws BadLocationException {
                 int line = textArea.getLineOfOffset(offset);
-                if (lockedLines.contains(line) && !myLines.contains(line)) {return;}
+                if (lockedLines.contains(line) && !myLines.contains(line)) {
+                    return;
+                }
                 super.replace(fb, offset, length, text, attrs);
                 handleSelectionChange();
             }
@@ -332,14 +336,16 @@ public class DocumentEditScreen extends JPanel {
             @Override
             public void remove(FilterBypass fb, int offset, int length) throws BadLocationException {
                 int line = textArea.getLineOfOffset(offset);
-                if (lockedLines.contains(line) && !myLines.contains(line)) {return;}
+                if (lockedLines.contains(line) && !myLines.contains(line)) {
+                    return;
+                }
                 super.remove(fb, offset, length);
                 handleSelectionChange();
             }
         };
 
         ((AbstractDocument) textArea.getDocument()).setDocumentFilter(secureFilter);
-        
+
         add(new JScrollPane(textArea), BorderLayout.CENTER);
     }
 
@@ -494,7 +500,11 @@ public class DocumentEditScreen extends JPanel {
     private final Timer idleTimer = new Timer(true);
     private TimerTask idleTask;
 
-    private void restartIdleTimer() {
+    public void restartIdleTimer() {
+        SwingUtilities.invokeLater(this::restartIdleTimerInternal);
+    }
+
+    private void restartIdleTimerInternal() {
         if (idleTask != null) idleTask.cancel();
         idleTask = new TimerTask() {
             @Override
@@ -516,6 +526,20 @@ public class DocumentEditScreen extends JPanel {
                 }
                 /* 마지막 구간 */
                 core.releaseLineLock(start, end);
+
+                /* (로컬) 상태·UI도 즉시 정리 */
+                SwingUtilities.invokeLater(() -> {
+                    Highlighter hl = textArea.getHighlighter();
+                    for (int ln : lines) {
+                        Object tag = myLineTags.remove(ln);
+                        if (tag != null) hl.removeHighlight(tag);
+                        lockedLines.remove(ln);
+                    }
+                    myLines.clear();
+
+                    // 타이머 대상이 사라졌으므로 다음 5초 작업은 무의미
+                    lastStart = lastEnd = -1;
+                });
             }
         };
         idleTimer.schedule(idleTask, 5000);

@@ -330,15 +330,6 @@ public class CMServerEventHandler implements CMAppEventHandler {
                         break;
                     }
 
-                    // 아직 제대로 된 줄 단위 잠금이 구현되지 않아 우선 주석 처리
-//                    if (!ownsAllLines(docName, newContent, user)) {
-//                        CMUserEvent rej = new CMUserEvent();
-//                        rej.setStringID("EDIT_REJECT");
-//                        rej.setEventField(CMInfo.CM_STR,"reason","no_lock");
-//                        m_serverStub.send(rej, user);
-//                        break;
-//                    }
-
                     // in-memory에 문서 내용을 업데이트
                     documents.put(docName, newContent);
                     System.out.println("[DEBUG] Server memory updated for doc=" + docName +
@@ -357,6 +348,7 @@ public class CMServerEventHandler implements CMAppEventHandler {
                         for (String other : participants) {
                             if (other.equals(user)) continue;
                             sendTextUpdateToClient(other, docName);
+                            sendCurrentLocks(other, docName);
                         }
                     }
                     break;

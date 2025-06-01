@@ -269,13 +269,22 @@ public class MainFrame {
 
     // 상단 문서 제목 갱신
     public void setCurrentDocument(String name) {
-        if (isModified) {
-            currentDocLabel.setText("📄 " + name + "*");
-        } else {
-            currentDocLabel.setText("📄 " + name);
+        String current =
+                currentDocLabel.getText()
+                        .replace("📄", "")
+                        .replace("*", "")
+                        .trim();
+        boolean changed = !name.equals(current);
+
+        // 다른 문서로 전환될 때만 모든 락 초기화
+        if (changed) {
+            editScreen.clearAllLocks();
+            isModified = false;          // 새 문서는 저장된 상태로 시작
         }
+
+        // 라벨 텍스트 갱신
+        currentDocLabel.setText("📄 " + name + (isModified ? "*" : ""));
         warnedAboutConflict = false;
-        editScreen.clearAllLocks();
     }
 
     public void updateDocumentUsers(String docName, List<String> users) {
